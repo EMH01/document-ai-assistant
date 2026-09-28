@@ -104,16 +104,15 @@ This demo targets one uploaded PDF per session. For that workload, a persistent 
 
 The earlier project already experimented with image-aware PDF understanding. Image captions keep that capability while making both text and visual information searchable through the same retrieval path.
 
-## Validation before portfolio release
+## Validation roadmap
 
-This branch is the first modernization pass, not the final showcase. Before extracting it to its own repository, the next checks are:
+The architecture is in place; the next validation work is:
 
 - run against representative PDFs: text-only, reports with charts, and mixed layouts
 - build a small retrieval evaluation set with expected source pages
 - measure retrieval quality, latency, and API usage
 - add screenshots / a short demo
 - decide on deployment and license
-- extract this directory into its own public repository once validated
 
 ## Project evolution
 
