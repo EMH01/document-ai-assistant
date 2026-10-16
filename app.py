@@ -4,7 +4,7 @@ import numpy as np
 import streamlit as st
 
 from document_ai.config import Settings
-from document_ai.pdf import extract_chunks
+from document_ai.docling_extract import extract_document
 from document_ai.providers import (
     LocalAnswer, LocalEmbeddings, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
@@ -17,22 +17,12 @@ st.title("📄 Document AI Assistant")
 st.caption("Explore your PDF with source-grounded answers. Open-weight models by default.")
 
 with st.sidebar:
-    provider = st.radio("AI provider", ["Open models (no key)", "OpenAI (own key)"])
-    use_openai = provider.startswith("OpenAI")
-    key = ""
-    if use_openai:
-        key = st.text_input("OpenAI API key", type="password", help="Used in this session only.")
-        if not key:
-            st.info("Enter a key to enable OpenAI mode.")
+    use_openai = settings.provider == "openai"
     st.header("Document")
     uploaded = st.file_uploader("Upload a PDF", type=["pdf"], max_upload_size=15)
-    include_images = st.toggle(
-        "Caption embedded images (OpenAI only)",
-        value=False, disabled=not use_openai,
-    )
     process = st.button("Process document", type="primary", disabled=uploaded is None)
     if st.session_state.get("chunks"):
-        st.metric("Indexed chunks", len(st.session_state.chunks))
+        st.caption(f"Documento preparado · {len(st.session_state.chunks)} fragmentos consultables")
         if st.button("Clear document"):
             st.session_state.chunks = []
             st.session_state.messages = []
@@ -57,9 +47,9 @@ def get_clients():
     if not use_openai:
         return LocalEmbeddings(settings.local_embedding_model), LocalAnswer(settings.local_chat_model), None
     from openai import OpenAI
-    if not key:
-        raise ValueError("Please enter your OpenAI key.")
-    client = OpenAI(api_key=key)
+    if not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("Configure OPENAI_API_KEY on the host for OpenAI mode.")
+    client = OpenAI()
     return OpenAIEmbeddings(client, settings.embedding_model), OpenAIAnswer(client, settings.chat_model), client
 
 if process and uploaded is not None:
@@ -69,11 +59,7 @@ if process and uploaded is not None:
     try:
         embeddings, _, client = get_clients()
         with st.spinner("Extracting pages and building the semantic index..."):
-            chunks = extract_chunks(
-                uploaded.getvalue(), source=uploaded.name,
-                client=client, vision_model=settings.chat_model,
-                include_image_captions=bool(use_openai and include_images),
-            )
+            chunks = extract_document(uploaded.getvalue(), source=uploaded.name)
             if not chunks:
                 st.error("No readable text found. Scanned PDFs need OCR, not yet implemented.")
                 st.stop()
