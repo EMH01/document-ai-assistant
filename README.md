@@ -1,6 +1,6 @@
 ## Hugging Face hosted answers (experimental)
 
-This opt-in mode moves **answer generation only** to Hugging Face Inference Providers.
+This opt-in mode tries to move **answer generation only** to Hugging Face Inference Providers. If the token is absent or the remote service fails (such as HTTP 401, quota or timeout), the application automatically uses local Qwen and avoids further remote attempts for that Streamlit session. The local fallback can still be slow on CPU.
 PDF extraction, OCR, embeddings, retrieval, and source viewer remain on the Streamlit host.
 
 Install with `python -m pip install -r requirements.txt`, then configure:
