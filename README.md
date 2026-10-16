@@ -1,3 +1,22 @@
+## Experimental visual understanding (opt-in)
+
+PDF processing detects larger embedded raster figures without running a visual language
+model. Detection is not semantic classification: some detected pictures may be decorative,
+and vector-only charts might not be detected.
+
+For experimental visual descriptions, install `pip install -e ".[open,docling,vision]"`
+and set `VISUAL_CAPTIONS=true` on the **host**, not in the public user interface.
+The default model is `HuggingFaceTB/SmolVLM2-500M-Video-Instruct`. At most two
+embedded figures per document are captioned, each with a short output limit.
+Generated descriptions are indexed with page and region references and can be wrong;
+inspect the original PDF before trusting numeric information in graphs.
+
+**Important:** This feature is off by default in Streamlit Community Cloud. It may
+consume too much CPU time or RAM to be suitable for free hosting. Compare latency,
+memory and response quality before enabling it publicly. Digital text extraction and
+Docling OCR remain separate processing paths; the experimental visual model does
+not replace OCR. Full-page scanned backgrounds are excluded from figure detection.
+
 # Document AI Assistant
 
 A source-grounded **PDF RAG assistant**, with **open-weight models by default** and an optional OpenAI provider.
