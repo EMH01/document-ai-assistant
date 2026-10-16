@@ -1,0 +1,2 @@
+# Install this project and the open-model + OCR optional dependencies.
+-e .[open,docling]
