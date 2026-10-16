@@ -2,7 +2,12 @@
 import hashlib
 import os
 
-import fitz
+# Windows: avoid symlink-based Hugging Face caches when possible.
+if os.name == "nt":
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+import pymupdf as fitz
 import numpy as np
 import streamlit as st
 
