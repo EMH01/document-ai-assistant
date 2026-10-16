@@ -78,3 +78,19 @@ def retrieve(
     response = client.embeddings.create(model=model, input=[query])
     query_vector = np.asarray(response.data[0].embedding, dtype=np.float32)
     return rank_chunks(chunks, query_vector, top_k=top_k)
+
+
+def hybrid_rank_chunks(chunks: Sequence[Chunk], query_vector: np.ndarray, query: str, top_k: int = 5) -> list[tuple[Chunk, float]]:
+    """Blend dense retrieval with simple lexical overlap for exact document terms."""
+    import re
+
+    candidates = rank_chunks(chunks, query_vector, top_k=min(len(chunks), max(20, top_k * 4)))
+    terms = set(re.findall(r"\w{3,}", query.casefold()))
+    if not terms:
+        return candidates[:top_k]
+    rescored = []
+    for chunk, dense_score in candidates:
+        words = set(re.findall(r"\w{3,}", chunk.text.casefold()))
+        coverage = len(terms & words) / len(terms)
+        rescored.append((chunk, 0.8 * dense_score + 0.2 * coverage))
+    return sorted(rescored, key=lambda item: item[1], reverse=True)[:top_k]
