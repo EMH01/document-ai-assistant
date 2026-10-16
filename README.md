@@ -1,5 +1,38 @@
 # Document AI Assistant
 
+A source-grounded **PDF RAG assistant**, with **open-weight models by default** and an optional OpenAI provider.
+
+## Quick start (no API key)
+
+Requires Python 3.11+ and enough host memory for CPU inference.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install -e ".[open,dev]"
+streamlit run app.py
+```
+
+The first start downloads the selected public model weights **to the machine running Streamlit**, not to visitors' browsers. By default:
+
+- **Embeddings:** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+- **Generation:** `Qwen/Qwen3-0.6B` (CPU inference; slower than hosted accelerated inference)
+- **Vector search:** normalized NumPy cosine similarity
+- **PDF extraction:** PyMuPDF
+- **Image captioning:** off by default; optional in OpenAI mode only
+
+The open model is a small experimental baseline: citation correctness, answer quality, Spanish performance and CPU latency need empirical validation. A model being open-weight does **not** mean hosted compute is unlimited or free.
+
+## Optional OpenAI mode
+
+Install base dependencies with `pip install -e ".[dev]"`, launch Streamlit and select **OpenAI (own key)** in the sidebar. The key is entered per session and is not saved to repository files by the application. Never commit or share credentials. The optional image-caption flow uses OpenAI too.
+
+### Data handling and deployment
+
+PDF content is processed on the Streamlit host, and may go to OpenAI only when that provider is selected. **Do not upload sensitive documents to an untrusted public demo.** Public deployments should add rate limiting, session/memory bounds, download/cache controls and a retention policy; these safeguards are not yet complete. Hosted inference, capacity and pricing depend on the chosen deployment environment. No public demo has been verified yet.
+
+---
+
 A compact **multimodal Retrieval-Augmented Generation (RAG)** application for asking grounded questions about PDF documents.
 
 This project evolved from earlier document-QA and chatbot experiments. The current implementation keeps the focus on document understanding while rebuilding the architecture around explicit, testable components.
@@ -54,7 +87,7 @@ The vector index is deliberately implemented with normalized NumPy arrays rather
 
 ## Local setup
 
-Requirements: **Python 3.11+** and an OpenAI API key.
+Requirements: **Python 3.11+**. Install the `open` extra for local inference, or the base dependencies for optional OpenAI mode.
 
 ```bash
 python -m venv .venv
@@ -65,7 +98,7 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Set `OPENAI_API_KEY` in `.env`, then run:
+Choose **OpenAI (own key)** and provide your key in the UI, then run:
 
 ```bash
 streamlit run app.py
@@ -75,10 +108,10 @@ streamlit run app.py
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `OPENAI_API_KEY` | API credential | required |
+| `OPENAI_API_KEY` | Optional API credential | optional |
 | `OPENAI_CHAT_MODEL` | Answering + optional image-caption model | `gpt-5.6-luna` |
 | `OPENAI_EMBEDDING_MODEL` | Embedding model | `text-embedding-3-small` |
-| `ENABLE_IMAGE_CAPTIONS` | Include embedded images during ingestion | `true` |
+| `ENABLE_IMAGE_CAPTIONS` | Image captions in OpenAI mode | `false` |
 | `TOP_K` | Retrieved chunks per question | `5` |
 
 ## Quality checks
