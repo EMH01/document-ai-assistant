@@ -91,3 +91,59 @@ def page_context_blocks(parents: list[Chunk], source: str, pages: set[int],
         if content:
             output.append(Chunk(text=content[:max_chars], page=page, source=source))
     return output
+
+
+_YEAR_WORDS = {
+    "primer": 1, "primero": 1, "first": 1,
+    "segundo": 2, "second": 2,
+    "tercer": 3, "tercero": 3, "third": 3,
+    "cuarto": 4, "fourth": 4,
+    "quinto": 5, "fifth": 5,
+}
+
+
+def requested_academic_year(question: str) -> int | None:
+    """Identify explicit academic-year references; do not guess from dates."""
+    match = re.search(
+        r"\\b(primer|primero|first|segundo|second|tercer|tercero|third|cuarto|fourth|quinto|fifth)\\b"
+        r"\\s*(?:[-º°.]\\s*)?(?:año|ano|year)?\\b",
+        question.casefold(),
+    )
+    return _YEAR_WORDS.get(match.group(1)) if match else None
+
+
+def section_page_blocks(parents: list[Chunk], question: str, source: str,
+                        max_chars: int = 15000) -> list[Chunk]:
+    """Find a requested year section, preserving the OCR rows until the next year.
+
+    Unlike whole-page retrieval, this stops at a later heading on a continuation
+    page. Section boundaries come from document text, not a generated answer.
+    """
+    year = requested_academic_year(question)
+    if year is None:
+        return []
+    headings = {
+        1: r"primer(?:o)?", 2: r"segundo", 3: r"tercer(?:o)?",
+        4: r"cuarto", 5: r"quinto",
+    }
+    heading = re.compile(r"(?i)\\b" + headings[year] + r"\\s*[-–]?\\s*año\\b")
+    any_heading = re.compile(
+        r"(?i)\\b(?:primer(?:o)?|segundo|tercer(?:o)?|cuarto|quinto)"
+        r"\\s*[-–]?\\s*año\\b"
+    )
+    groups: dict[int, list[str]] = {}
+    active = False
+    for item in parents:
+        if item.source != source:
+            continue
+        text = item.text
+        if heading.search(text):
+            active = True
+        elif active and any_heading.search(text):
+            break
+        if active:
+            groups.setdefault(item.page, []).append(text)
+    return [
+        Chunk(text="\\n".join(parts)[:max_chars], page=page, source=source)
+        for page, parts in sorted(groups.items()) if parts
+    ]
