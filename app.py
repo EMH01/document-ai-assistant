@@ -9,7 +9,7 @@ from document_ai.providers import (
     LocalAnswer, LocalEmbeddings, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
 )
-from document_ai.retrieval import rank_chunks
+from document_ai.retrieval import hybrid_rank_chunks
 
 st.set_page_config(page_title="Document AI Assistant", page_icon="📄", layout="wide")
 settings = Settings()
@@ -85,12 +85,12 @@ if question:
             embeddings, answerer, _ = get_clients()
             with st.spinner("Searching the PDF and generating an answer..."):
                 query_vec = embeddings.encode([question])[0]
-                ranked = rank_chunks(st.session_state.chunks, np.asarray(query_vec), settings.top_k)
+                ranked = hybrid_rank_chunks(st.session_state.chunks, np.asarray(query_vec), question, settings.top_k)
                 response = answer_from_chunks(answerer, question, ranked)
             st.markdown(response)
             with st.expander("Retrieved source excerpts"):
                 for idx, (chunk, score) in enumerate(ranked, 1):
-                    st.markdown(f"**[{idx}] {chunk.citation} — similarity {score:.3f}**")
+                    st.markdown(f"**[{idx}] {chunk.citation} — retrieval score {score:.3f}**")
                     st.write(chunk.text)
             st.session_state.messages.append({"role": "assistant", "content": response})
         except Exception as exc:
