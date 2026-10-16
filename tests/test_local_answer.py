@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from document_ai import providers
 
 
-def test_local_answer_disables_thinking(monkeypatch):
+def test_local_answer_keeps_thinking_private(monkeypatch):
     captured = {}
 
     class FakeTokenizer:
@@ -20,7 +20,7 @@ def test_local_answer_disables_thinking(monkeypatch):
 
     monkeypatch.setattr(providers, "_local_pipeline", lambda model: FakePipeline())
     answer = providers.LocalAnswer("Qwen/Qwen3-0.6B").answer("¿Qué dice?", "[1] ejemplo")
-    assert captured["enable_thinking"] is False
+    assert captured["enable_thinking"] is True
     assert captured["prompt"] == "rendered prompt"
     assert answer.startswith("La respuesta")
 
@@ -37,4 +37,4 @@ def test_incomplete_reasoning_is_not_exposed(monkeypatch):
     monkeypatch.setattr(providers, "_local_pipeline", lambda model: FakePipeline())
     answer = providers.LocalAnswer("Qwen/Qwen3-0.6B").answer("Pregunta", "Contexto")
     assert "<think>" not in answer
-    assert "complete answer" in answer
+    assert "agotó su tiempo" in answer
