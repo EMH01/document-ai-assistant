@@ -8,7 +8,7 @@ load_dotenv()
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    provider: str = os.getenv("AI_PROVIDER", "open")
+    provider: str = os.getenv("AI_PROVIDER", "gguf")
     local_embedding_model: str = os.getenv(
         "LOCAL_EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
