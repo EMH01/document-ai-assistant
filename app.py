@@ -1,97 +1,113 @@
 import os
 
+import numpy as np
 import streamlit as st
-from openai import OpenAI
 
 from document_ai.config import Settings
-from document_ai.llm import answer_question
 from document_ai.pdf import extract_chunks
-from document_ai.retrieval import embed_chunks, retrieve
+from document_ai.providers import (
+    LocalAnswer, LocalEmbeddings, OpenAIAnswer, OpenAIEmbeddings,
+    answer_from_chunks, index_chunks,
+)
+from document_ai.retrieval import rank_chunks
 
 st.set_page_config(page_title="Document AI Assistant", page_icon="📄", layout="wide")
 settings = Settings()
-
 st.title("📄 Document AI Assistant")
-st.caption("Multimodal PDF ingestion + semantic retrieval + grounded answers")
+st.caption("Explore your PDF with source-grounded answers. Open-weight models by default.")
 
-if not os.getenv("OPENAI_API_KEY"):
-    st.info("Set OPENAI_API_KEY in your environment or .env file to run the demo.")
-    st.stop()
-
-client = OpenAI()
+with st.sidebar:
+    provider = st.radio("AI provider", ["Open models (no key)", "OpenAI (own key)"])
+    use_openai = provider.startswith("OpenAI")
+    key = ""
+    if use_openai:
+        key = st.text_input("OpenAI API key", type="password", help="Used in this session only.")
+        if not key:
+            st.info("Enter a key to enable OpenAI mode.")
+    st.header("Document")
+    uploaded = st.file_uploader("Upload a PDF", type=["pdf"], max_upload_size=15)
+    include_images = st.toggle(
+        "Caption embedded images (OpenAI only)",
+        value=False, disabled=not use_openai,
+    )
+    process = st.button("Process document", type="primary", disabled=uploaded is None)
+    if st.session_state.get("chunks"):
+        st.metric("Indexed chunks", len(st.session_state.chunks))
+        if st.button("Clear document"):
+            st.session_state.chunks = []
+            st.session_state.messages = []
+            st.session_state.provider_id = None
+            st.rerun()
 
 if "chunks" not in st.session_state:
     st.session_state.chunks = []
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "provider_id" not in st.session_state:
+    st.session_state.provider_id = None
 
-with st.sidebar:
-    st.header("Document")
-    uploaded = st.file_uploader("Upload a PDF", type=["pdf"])
-    include_images = st.toggle(
-        "Describe embedded images",
-        value=settings.enable_image_captions,
-        help=(
-            "Uses the configured chat model during ingestion to convert images "
-            "into searchable captions."
-        ),
-    )
-    process = st.button("Process document", type="primary", disabled=uploaded is None)
+provider_id = "openai" if use_openai else "open"
+if st.session_state.provider_id is not None and st.session_state.provider_id != provider_id:
+    st.warning("Provider changed: process the PDF again to rebuild its embeddings.")
+    st.session_state.chunks = []
+    st.session_state.messages = []
+    st.session_state.provider_id = None
 
-    if st.session_state.chunks:
-        st.metric("Indexed chunks", len(st.session_state.chunks))
-        if st.button("Clear document"):
-            st.session_state.chunks = []
-            st.session_state.messages = []
-            st.rerun()
+def get_clients():
+    if not use_openai:
+        return LocalEmbeddings(settings.local_embedding_model), LocalAnswer(settings.local_chat_model), None
+    from openai import OpenAI
+    if not key:
+        raise ValueError("Please enter your OpenAI key.")
+    client = OpenAI(api_key=key)
+    return OpenAIEmbeddings(client, settings.embedding_model), OpenAIAnswer(client, settings.chat_model), client
 
 if process and uploaded is not None:
-    with st.status("Indexing document...", expanded=True) as status:
-        st.write("Extracting text and document structure")
-        chunks = extract_chunks(
-            uploaded.getvalue(),
-            source=uploaded.name,
-            client=client,
-            vision_model=settings.chat_model,
-            include_image_captions=include_images,
-        )
-        if not chunks:
-            status.update(label="No readable content found", state="error")
-            st.stop()
-        st.write(f"Creating embeddings for {len(chunks)} chunks")
-        embed_chunks(client, chunks, settings.embedding_model)
-        st.session_state.chunks = chunks
-        st.session_state.messages = []
-        status.update(label="Document indexed", state="complete")
+    if uploaded.size > 15 * 1024 * 1024:
+        st.error("Maximum PDF size: 15 MB.")
+        st.stop()
+    try:
+        embeddings, _, client = get_clients()
+        with st.spinner("Extracting pages and building the semantic index..."):
+            chunks = extract_chunks(
+                uploaded.getvalue(), source=uploaded.name,
+                client=client, vision_model=settings.chat_model,
+                include_image_captions=bool(use_openai and include_images),
+            )
+            if not chunks:
+                st.error("No readable text found. Scanned PDFs need OCR, not yet implemented.")
+                st.stop()
+            index_chunks(embeddings, chunks)
+            st.session_state.chunks = chunks
+            st.session_state.messages = []
+            st.session_state.provider_id = provider_id
+        st.success(f"Indexed {len(chunks)} excerpts.")
+    except Exception as exc:
+        st.error(f"Document processing failed: {exc}")
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-question = st.chat_input(
-    "Ask a question about the document",
-    disabled=not bool(st.session_state.chunks),
-)
-
+question = st.chat_input("Ask a question about your PDF", disabled=not bool(st.session_state.chunks))
 if question:
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
-
     with st.chat_message("assistant"):
-        with st.spinner("Retrieving relevant context..."):
-            retrieved = retrieve(
-                client,
-                st.session_state.chunks,
-                question,
-                settings.embedding_model,
-                top_k=settings.top_k,
-            )
-            answer = answer_question(client, question, retrieved, settings.chat_model)
-        st.markdown(answer)
-        with st.expander("Retrieved context"):
-            for index, (chunk, score) in enumerate(retrieved, start=1):
-                st.markdown(f"**[{index}] {chunk.citation} — {score:.3f}**")
-                st.write(chunk.text)
+        try:
+            embeddings, answerer, _ = get_clients()
+            with st.spinner("Searching the PDF and generating an answer..."):
+                query_vec = embeddings.encode([question])[0]
+                ranked = rank_chunks(st.session_state.chunks, np.asarray(query_vec), settings.top_k)
+                response = answer_from_chunks(answerer, question, ranked)
+            st.markdown(response)
+            with st.expander("Retrieved source excerpts"):
+                for idx, (chunk, score) in enumerate(ranked, 1):
+                    st.markdown(f"**[{idx}] {chunk.citation} — similarity {score:.3f}**")
+                    st.write(chunk.text)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+        except Exception as exc:
+            st.error(f"Answer generation failed: {exc}")
 
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+st.caption("Models run on the host. Uploaded content may be processed by the hosting server; avoid sensitive PDFs in public demos.")
