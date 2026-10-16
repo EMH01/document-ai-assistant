@@ -21,6 +21,27 @@ The first start downloads the selected public model weights **to the machine run
 - **PDF extraction:** PyMuPDF
 - **Image captioning:** off by default; optional in OpenAI mode only
 
+## Multi-document workspace and citation viewer
+
+The Streamlit interface accepts multiple PDF uploads in one session. You can search
+all uploaded files or scope questions to one file. Each retrieved excerpt carries
+a PDF filename and page number. The source viewer renders the original page and
+highlights a source region **only when Docling provides valid location coordinates**.
+Some scanned or reconstructed elements may have no usable coordinates, so the page
+is shown without a highlight rather than showing a misleading position.
+
+The hosted application **must install the Docling extra** for OCR:
+```bash
+pip install -e ".[open,docling]"
+```
+The app deliberately reports an error when Docling is missing instead of silently
+using a no-OCR fallback. First use may download OCR/layout models. CPU deployments
+may take several minutes for large scans. Deploy with bounded memory and processing
+time, and validate performance before publishing a public link.
+
+The user interface provides Spanish and English labels. Model responses are
+requested in the language of the question; language fidelity must be tested.
+
 ## Structured extraction with Docling
 
 Install `pip install -e ".[open,docling,dev]"` for the recommended document pipeline.
