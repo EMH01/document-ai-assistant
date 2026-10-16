@@ -92,6 +92,56 @@ class LocalAnswer:
         return public_answer(result[0]["generated_text"])
 
 
+@lru_cache(maxsize=1)
+def _gguf_model(repo_id: str, filename: str, n_ctx: int, n_gpu_layers: int):
+    from huggingface_hub import hf_hub_download
+    from llama_cpp import Llama
+
+    model_path = hf_hub_download(repo_id=repo_id, filename=filename)
+    return Llama(
+        model_path=model_path,
+        n_ctx=n_ctx,
+        n_threads=max(1, min(6, (__import__("os").cpu_count() or 4) - 1)),
+        n_gpu_layers=n_gpu_layers,
+        verbose=False,
+    )
+
+
+class GGUFAnswer:
+    """Local quantized llama.cpp generation; model is loaded on first question."""
+
+    def __init__(self, repo_id: str = "ggml-org/Qwen3-1.7B-GGUF",
+                 filename: str = "Qwen3-1.7B-Q4_K_M.gguf",
+                 n_ctx: int = 4096, n_gpu_layers: int = 0):
+        self.repo_id = repo_id
+        self.filename = filename
+        self.n_ctx = n_ctx
+        self.n_gpu_layers = n_gpu_layers
+
+    def answer(self, question: str, context: str) -> str:
+        model = _gguf_model(self.repo_id, self.filename, self.n_ctx, self.n_gpu_layers)
+        response = model.create_chat_completion(
+            messages=[
+                {"role": "system", "content": (
+                    "Eres un asistente de análisis documental. Contesta en el idioma de "
+                    "la pregunta usando exclusivamente los fragmentos dados. Responde "
+                    "directamente en lenguaje natural; no copies el contexto. Si falta "
+                    "información, dilo. Usa solamente identificadores de cita válidos "
+                    "como [1] y [2]. No inventes cifras ni fuentes. /no_think"
+                )},
+                {"role": "user", "content": (
+                    f"Pregunta: {question}\\n\\nFragmentos del PDF:\\n{context}\\n"
+                    "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
+                )},
+            ],
+            max_tokens=240,
+            temperature=0.1,
+            top_p=0.9,
+        )
+        content = response["choices"][0]["message"].get("content") or ""
+        return public_answer(content)
+
+
 class HuggingFaceAnswer:
     """Hosted open-weight chat via Hugging Face Inference Providers."""
 
