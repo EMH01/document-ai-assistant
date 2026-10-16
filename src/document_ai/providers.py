@@ -1,4 +1,5 @@
 """Pluggable embedding and answer providers. Open weights are the default."""
+import re
 from functools import lru_cache
 from typing import Protocol
 
@@ -49,8 +50,18 @@ def _local_pipeline(model: str):
     return pipeline("text-generation", model=model, device=-1)
 
 
+def public_answer(text: str) -> str:
+    """Only expose the final answer; never leak unfinished thinking."""
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[-1]
+    elif "<think>" in text:
+        return "El modelo agotó su tiempo de generación antes de responder. Inténtalo de nuevo."
+    text = re.sub(r"<\\/?(?:think|answer)>", "", text).strip()
+    return text or "No se ha generado una respuesta final. Inténtalo de nuevo."
+
+
 class LocalAnswer:
-    def __init__(self, model: str, max_new_tokens: int = 350):
+    def __init__(self, model: str, max_new_tokens: int = 900):
         self.model, self.max_new_tokens = model, max_new_tokens
 
     def answer(self, question: str, context: str) -> str:
@@ -63,25 +74,16 @@ class LocalAnswer:
             {"role": "user", "content": f"Question: {question}\n\nPDF excerpts:\n{context}"},
         ]
         generator = _local_pipeline(self.model)
-        # Qwen3 enables thinking by default. Render its chat template with thinking disabled.
+        # Allow Qwen3 to reason internally while hiding that reasoning from visitors.
         prompt = generator.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
+            messages, tokenize=False, add_generation_prompt=True, enable_thinking=True
         )
         result = generator(
-            prompt, max_new_tokens=self.max_new_tokens, do_sample=False,
+            prompt, max_new_tokens=self.max_new_tokens, do_sample=True,
+            temperature=0.6, top_p=0.95, top_k=20,
             return_full_text=False,
         )
-        answer = result[0]["generated_text"].strip()
-        # Defensive guard: never display internal reasoning, even for a mismatched template.
-        if "<think>" in answer:
-            if "</think>" not in answer:
-                return (
-                    "The model did not produce a complete answer. "
-                    "Please try again or use a shorter question."
-                )
-            answer = answer.rsplit("</think>", 1)[-1].strip()
-        return answer or "The model did not produce a complete answer. Please try again."
-
+        return public_answer(result[0]["generated_text"])
 
 
 class OpenAIAnswer:
