@@ -135,7 +135,7 @@ class GGUFAnswer:
                     "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
                 )},
             ],
-            max_tokens=160,
+            max_tokens=240,
             temperature=0.7,
             top_p=0.8,
         )
