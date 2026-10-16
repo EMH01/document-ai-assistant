@@ -14,7 +14,7 @@ from document_ai.docling_extract import extract_document
 from document_ai.hierarchical import build_search_index, expand_with_page_neighbors
 from document_ai.visual import pdf_visual_regions, describe_visuals
 from document_ai.providers import (
-    LocalAnswer, LocalEmbeddings, OpenAIAnswer, OpenAIEmbeddings,
+    LocalAnswer, LocalEmbeddings, HuggingFaceAnswer, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
 )
 from document_ai.retrieval import hybrid_rank_chunks
@@ -84,8 +84,22 @@ if st.session_state.provider_id not in (None, provider_id):
 st.session_state.provider_id = provider_id
 
 def get_clients():
-    if provider_id != "openai":
+    if provider_id == "hf":
+        token = os.getenv("HF_TOKEN")
+        if not token:
+            try:
+                token = st.secrets.get("HF_TOKEN")
+            except (FileNotFoundError, KeyError):
+                token = None
+        if not token:
+            raise ValueError("Configure HF_TOKEN in Streamlit secrets or your environment.")
+        return LocalEmbeddings(settings.local_embedding_model), HuggingFaceAnswer(
+            token, settings.hf_chat_model
+        )
+    if provider_id == "open":
         return LocalEmbeddings(settings.local_embedding_model), LocalAnswer(settings.local_chat_model)
+    if provider_id != "openai":
+        raise ValueError("AI_PROVIDER must be open, hf or openai")
     from openai import OpenAI
     if not os.getenv("OPENAI_API_KEY"):
         raise ValueError("OPENAI_API_KEY must be configured on the host.")
