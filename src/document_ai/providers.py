@@ -101,6 +101,7 @@ def _gguf_model(repo_id: str, filename: str, n_ctx: int, n_gpu_layers: int):
     return Llama(
         model_path=model_path,
         n_ctx=n_ctx,
+        n_batch=256,
         n_threads=max(1, min(6, (__import__("os").cpu_count() or 4) - 1)),
         n_gpu_layers=n_gpu_layers,
         verbose=False,
@@ -134,9 +135,9 @@ class GGUFAnswer:
                     "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
                 )},
             ],
-            max_tokens=240,
-            temperature=0.1,
-            top_p=0.9,
+            max_tokens=160,
+            temperature=0.7,
+            top_p=0.8,
         )
         content = response["choices"][0]["message"].get("content") or ""
         return public_answer(content)
