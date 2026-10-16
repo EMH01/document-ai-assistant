@@ -12,7 +12,7 @@ import streamlit as st
 
 from document_ai.config import Settings
 from document_ai.docling_extract import extract_document
-from document_ai.hierarchical import build_search_index, expand_with_page_neighbors, page_context_blocks
+from document_ai.hierarchical import build_search_index, expand_with_page_neighbors, page_context_blocks, section_page_blocks
 from document_ai.visual import pdf_visual_regions, describe_visuals
 from document_ai.providers import (
     LocalAnswer, LocalEmbeddings, GGUFAnswer, HuggingFaceAnswer, FallbackAnswer, OpenAIAnswer, OpenAIEmbeddings,
@@ -201,20 +201,23 @@ def draw_pdf(raw: bytes, page_number: int, bbox=None):
         page_number = max(1, min(page_number, len(document)))
         page = document[page_number - 1]
         scale = min(1.4, 1100 / max(page.rect.width, 1))
-        if bbox is not None:
+        boxes = bbox if isinstance(bbox, list) else ([bbox] if bbox else [])
+        valid_boxes = 0
+        for coordinates in boxes:
             try:
-                rect = fitz.Rect(*bbox) & page.rect
+                rect = fitz.Rect(*coordinates) & page.rect
                 if not rect.is_empty and rect.get_area() > 0:
-                    page.draw_rect(rect, color=(0.82, 0.55, 0.0), fill=(1.0, 0.9, 0.45), fill_opacity=0.30, width=1.5, overlay=True)
-                else:
-                    bbox = None
+                    page.draw_rect(rect, color=(0.82, 0.55, 0.0),
+                                   fill=(1.0, 0.9, 0.45), fill_opacity=0.25,
+                                   width=1.2, overlay=True)
+                    valid_boxes += 1
             except (ValueError, TypeError):
-                bbox = None
+                pass
         pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
         image_data = pix.tobytes("png")
     st.image(image_data, width="stretch")
     # Highlight only from verified document provenance, never guessed from model output.
-    if bbox is None:
+    if valid_boxes == 0:
         st.caption(t["no_coords"])
 
 with main:
@@ -234,13 +237,15 @@ with main:
                 st.caption(f"{t['search_time']}: {timings['retrieval']:.1f}s · {t['generation_time']}: {timings['generation']:.1f}s · {t['total_time']}: {timings['total']:.1f}s")
             if message["role"] == "assistant" and message.get("ranked"):
                 with st.expander(t["sources"] + " · " + t["candidate_sources"]):
-                    for j, chunk, score, file_id in message["ranked"]:
+                    for source_item in message["ranked"]:
+                        j, chunk, score, file_id = source_item[:4]
+                        highlights = source_item[4] if len(source_item) > 4 else chunk.bbox
                         status = t["cited_source"] if j in message.get("cited_numbers", set()) else t["candidate_source"]
                         if st.button(
-                            f"[{j}] {chunk.source} · {t['pages']} {chunk.page} · {status} · {t['score']} {score:.2f}",
+                            f"[{j}] {chunk.source} · {t['pages']} {chunk.page} · {status}",
                             key=f"source_{idx}_{j}",
                         ):
-                            st.session_state.selected_source = (file_id, chunk.page, chunk.bbox)
+                            st.session_state.selected_source = (file_id, chunk.page, highlights)
                             st.session_state.viewer_open = True
                             st.rerun()
                         st.caption(chunk.text[:220])
@@ -263,9 +268,11 @@ def answer_job(question, selected, embeddings, answerer, top_k):
     )
     if matched:
         focused = matched[0][0]
-        page_chunks = page_context_blocks(
-            original_chunks, focused.source, {focused.page, focused.page + 1}
-        )
+        page_chunks = section_page_blocks(original_chunks, question, focused.source)
+        if not page_chunks:
+            page_chunks = page_context_blocks(
+                original_chunks, focused.source, {focused.page, focused.page + 1}
+            )
         ranked = [(chunk, matched[0][1]) for chunk in page_chunks]
     else:
         ranked = []
@@ -285,7 +292,14 @@ def answer_job(question, selected, embeddings, answerer, top_k):
         file_id = next(
             key for key, entry in selected.items() if entry["name"] == chunk.source
         )
-        sources.append((number, chunk, score, file_id))
+        original_regions = [
+            item.bbox for item in original_chunks
+            if item.source == chunk.source and item.page == chunk.page
+            and item.bbox is not None
+            and item.text in chunk.text
+        ]
+        highlights = list(dict.fromkeys(original_regions))[:28]
+        sources.append((number, chunk, score, file_id, highlights))
     return {
         "role": "assistant", "content": answer, "ranked": sources,
         "cited_numbers": cited,
