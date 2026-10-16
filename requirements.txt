@@ -1,3 +1,0 @@
-# Streamlit Community Cloud deployment: install the package and open-model + OCR extras.
-# The application code remains under src/document_ai.
--e .[open,docling]
