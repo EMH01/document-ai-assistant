@@ -184,7 +184,7 @@ def draw_pdf(raw: bytes, page_number: int, bbox=None):
                 bbox = None
         pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
         image_data = pix.tobytes("png")
-    st.image(image_data, use_container_width=True)
+    st.image(image_data, width="stretch")
     # Highlight only from verified document provenance, never guessed from model output.
     if bbox is None:
         st.caption(t["no_coords"])
