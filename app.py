@@ -38,6 +38,7 @@ TEXT = {
         "show_viewer": "Mostrar visor", "hide_viewer": "Ocultar visor",
         "extract_time": "Extracción/OCR", "index_time": "Indexación", "total_time": "Tiempo total",
         "search_time": "Búsqueda", "generation_time": "Generación",
+        "interaction_note": "Si envías una pregunta, espera su respuesta antes de añadir archivos: Streamlit puede reiniciar la ejecución activa.",
     },
     "en": {
         "tagline": "Ask questions about one or more PDFs and inspect the original sources.",
@@ -56,6 +57,7 @@ TEXT = {
         "total": "Ready documents", "show_viewer": "Show viewer", "hide_viewer": "Hide viewer",
         "extract_time": "Extraction/OCR", "index_time": "Indexing", "total_time": "Total time",
         "search_time": "Retrieval", "generation_time": "Generation",
+        "interaction_note": "Wait for the current answer before uploading another file: Streamlit may rerun and interrupt active generation.",
     },
 }
 
@@ -90,6 +92,7 @@ with st.sidebar:
     st.session_state.language = "es" if language == "Español" else "en"
     t = TEXT[st.session_state.language]
     st.header(t["files"])
+    st.caption(t["interaction_note"])
     uploaded = st.file_uploader(
         t["upload"], type=["pdf"], accept_multiple_files=True,
         max_upload_size=15, key=f"upload_{st.session_state.upload_key}",
@@ -111,7 +114,6 @@ if uploaded is not None:
     for digest in list(st.session_state.files):
         if digest not in uploads:
             del st.session_state.files[digest]
-            st.session_state.messages = []
     for digest, (name, raw) in uploads.items():
         if digest in st.session_state.files:
             continue
@@ -127,7 +129,6 @@ if uploaded is not None:
             after_index = time.perf_counter()
             timings = {"extract": after_extract - started, "index": after_index - after_extract, "total": after_index - started}
             st.session_state.files[digest] = {"name": name, "bytes": raw, "chunks": chunks, "search_chunks": search_chunks, "parent_map": parent_map, "timings": timings}
-            st.session_state.messages = []
         except Exception as exc:
             st.error(f"{t['failed']}: {name} — {exc}")
 
