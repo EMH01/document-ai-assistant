@@ -76,7 +76,11 @@ for key, initial in {
         st.session_state[key] = initial
 
 settings = Settings()
-provider_id = settings.provider
+try:
+    streamlit_provider = st.secrets.get("AI_PROVIDER")
+except (FileNotFoundError, KeyError):
+    streamlit_provider = None
+provider_id = os.getenv("AI_PROVIDER") or streamlit_provider or settings.provider
 if st.session_state.provider_id not in (None, provider_id):
     st.session_state.files = {}
     st.session_state.processed_cache = {}
