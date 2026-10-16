@@ -239,10 +239,14 @@ if question:
                 retrieval_finished = time.perf_counter()
                 answer = answer_from_chunks(answerer, question, ranked)
                 generation_finished = time.perf_counter()
+                raw_citations = [int(n) for n in re.findall(r"\[(\d+)\]", answer)]
                 cited_numbers = {
-                    int(n) for n in re.findall(r"\[(\d+)\]", answer)
+                    n for n in raw_citations
                     if 1 <= int(n) <= len(ranked)
                 }
+                if any(n > len(ranked) or n < 1 for n in raw_citations):
+                    answer = re.sub(r"\[(\d+)\]", lambda match: match.group(0) if 1 <= int(match.group(1)) <= len(ranked) else "", answer).strip()
+                    answer += ("\n\n*Las referencias no verificables se han omitido.*" if st.session_state.language == "es" else "\n\n*Unverifiable references were omitted.*")
                 result = []
                 for number, (chunk, score) in enumerate(ranked, 1):
                     file_id = next(key for key, entry in selected.items() if any(c is chunk for c in entry["chunks"]))
