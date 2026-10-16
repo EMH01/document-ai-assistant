@@ -5,12 +5,14 @@ from .models import Chunk
 from .retrieval import chunk_text
 
 
-def extract_document(pdf_bytes: bytes, source: str) -> list[Chunk]:
+def extract_document(pdf_bytes: bytes, source: str, require_docling: bool = False) -> list[Chunk]:
     try:
         from docling.datamodel.base_models import InputFormat, DocumentStream
         from docling.datamodel.pipeline_options import PdfPipelineOptions
         from docling.document_converter import DocumentConverter, PdfFormatOption
-    except ImportError:
+    except ImportError as exc:
+        if require_docling:
+            raise RuntimeError("Docling OCR unavailable: install document-ai-assistant[docling].") from exc
         from .pdf import extract_chunks
         return extract_chunks(pdf_bytes, source=source)
 
