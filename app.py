@@ -10,6 +10,7 @@ import streamlit as st
 
 from document_ai.config import Settings
 from document_ai.docling_extract import extract_document
+from document_ai.hierarchical import build_search_index, expand_ranked
 from document_ai.providers import (
     LocalAnswer, LocalEmbeddings, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
@@ -121,10 +122,11 @@ if uploaded is not None:
                 chunks = extract_document(raw, source=name, require_docling=True)
             after_extract = time.perf_counter()
             with st.spinner(f"{t['processing']}: {name} — {t['embed']}"):
-                index_chunks(embeddings, chunks)
+                search_chunks, parent_map = build_search_index(chunks)
+                index_chunks(embeddings, search_chunks)
             after_index = time.perf_counter()
             timings = {"extract": after_extract - started, "index": after_index - after_extract, "total": after_index - started}
-            st.session_state.files[digest] = {"name": name, "bytes": raw, "chunks": chunks, "timings": timings}
+            st.session_state.files[digest] = {"name": name, "bytes": raw, "chunks": chunks, "search_chunks": search_chunks, "parent_map": parent_map, "timings": timings}
             st.session_state.messages = []
         except Exception as exc:
             st.error(f"{t['failed']}: {name} — {exc}")
@@ -207,8 +209,10 @@ if question:
                 answer_started = time.perf_counter()
                 vector = np.asarray(embeddings.encode([question])[0])
                 selected = all_files if scope == "__all__" else {scope: all_files[scope]}
-                chunks = [chunk for entry in selected.values() for chunk in entry["chunks"]]
-                ranked = hybrid_rank_chunks(chunks, vector, question, settings.top_k)
+                children = [child for entry in selected.values() for child in entry["search_chunks"]]
+                parents = {k: v for entry in selected.values() for k, v in entry["parent_map"].items()}
+                ranked_children = hybrid_rank_chunks(children, vector, question, settings.top_k)
+                ranked = expand_ranked(ranked_children, parents)
                 retrieval_finished = time.perf_counter()
                 answer = answer_from_chunks(answerer, question, ranked)
                 generation_finished = time.perf_counter()
