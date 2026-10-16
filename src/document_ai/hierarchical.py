@@ -41,3 +41,27 @@ def build_search_index(parents: list[Chunk]) -> tuple[list[Chunk], dict[int, Chu
 def expand_ranked(ranked_children: list[tuple[Chunk, float]], mapping: dict[int, Chunk]):
     """Return original unabridged parents with their retrieval scores."""
     return [(mapping[id(child)], score) for child, score in ranked_children]
+
+
+def expand_with_page_neighbors(
+    ranked_children: list[tuple[Chunk, float]],
+    mapping: dict[int, Chunk],
+    parents: list[Chunk],
+    max_excerpts: int = 14,
+) -> list[tuple[Chunk, float]]:
+    """Recover nearby evidence, including a section's continuation on the next page.
+
+    This is useful when OCR extracts table rows as separate text items.
+    No LLM call is required for expansion.
+    """
+    ranked = expand_ranked(ranked_children, mapping)
+    ordered = sorted(parents, key=lambda chunk: (chunk.source, chunk.page))
+    selected: dict[int, tuple[Chunk, float]] = {}
+    for parent, score in ranked:
+        selected[id(parent)] = (parent, score)
+        for neighbor in ordered:
+            if len(selected) >= max_excerpts:
+                break
+            if neighbor.source == parent.source and abs(neighbor.page - parent.page) <= 1:
+                selected.setdefault(id(neighbor), (neighbor, score * 0.85))
+    return list(selected.values())[:max_excerpts]
