@@ -1,3 +1,31 @@
+## Streamlit Community Cloud deployment gate
+
+**Do not merge/deploy until a clean-environment install and basic PDF Q&A pass.**
+The current branch uses a CPU-bound GGUF model plus Docling OCR; a successful
+local run is not proof it fits Community Cloud memory/CPU limits.
+
+1. Create a clean Python 3.11/3.12 virtual environment.
+2. Run `python -m pip install -r requirements.txt` then
+   `python -m pip install -e ".[dev]"`. If the CPU wheel for
+   `llama-cpp-python` is not available for the chosen Python/Linux platform,
+   installation may attempt to compile it and fail.
+3. Run `python -m pytest -q` and
+   `python -m compileall -q app.py src tests`.
+4. Launch `python -m streamlit run app.py`, upload a **synthetic test PDF**
+   (without personal data), ask a question, and verify the response and PDF
+   source navigation. A model download and high RAM use are expected on cold
+   start.
+5. For public deployment select repository `EMH01/document-ai-assistant`,
+   branch `main` **after validation**, entrypoint `app.py`, and choose a
+   supported Python version in Streamlit Cloud settings. Do not set
+   `AI_PROVIDER=hf` or place any Hugging Face token in public code.
+6. Check actual cold-start RAM, PDF OCR latency, GGUF response latency, and
+   concurrent visitor behavior before describing the demo as production-ready.
+
+External HF Inference Providers are optional and not required for default local
+GGUF generation. Python packages and public GGUF weights do require network
+access at installation/first download time.
+
 ## New local answer engine: GGUF (test branch)
 
 The default answer provider is now `AI_PROVIDER=gguf`: an open-weights
