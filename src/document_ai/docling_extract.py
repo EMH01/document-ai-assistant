@@ -1,4 +1,5 @@
 """Structure-aware PDF extraction. Optional Docling, safe PyMuPDF fallback."""
+import os
 from functools import lru_cache
 from io import BytesIO
 
@@ -15,13 +16,15 @@ def needs_ocr(pdf_bytes: bytes, min_chars: int = 35) -> bool:
 
 
 @lru_cache(maxsize=2)
-def _converter(use_ocr: bool):
+def _converter(use_ocr: bool, ocr_backend: str = "onnxruntime"):
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
 
     options = PdfPipelineOptions()
     options.do_ocr = use_ocr
+    if use_ocr:
+        options.ocr_options = RapidOcrOptions(backend=ocr_backend, lang=["iso:es"])
     options.do_table_structure = True
     # Keep CPU as the portable default for Streamlit Community Cloud.
     options.enable_remote_services = False
@@ -41,7 +44,10 @@ def extract_document(pdf_bytes: bytes, source: str, require_docling: bool = Fals
         from .pdf import extract_chunks
         return extract_chunks(pdf_bytes, source=source)
 
-    converter = _converter(needs_ocr(pdf_bytes))
+    backend = os.getenv("DOC_OCR_BACKEND", "onnxruntime").strip().lower()
+    if backend not in {"onnxruntime", "torch"}:
+        raise ValueError("DOC_OCR_BACKEND must be onnxruntime or torch")
+    converter = _converter(needs_ocr(pdf_bytes), backend)
     result = converter.convert(DocumentStream(name=source, stream=BytesIO(pdf_bytes)))
     chunks: list[Chunk] = []
     document = result.document
