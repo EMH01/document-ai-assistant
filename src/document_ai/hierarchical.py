@@ -105,8 +105,8 @@ _YEAR_WORDS = {
 def requested_academic_year(question: str) -> int | None:
     """Identify explicit academic-year references; do not guess from dates."""
     match = re.search(
-        r"\\b(primer|primero|first|segundo|second|tercer|tercero|third|cuarto|fourth|quinto|fifth)\\b"
-        r"\\s*(?:[-º°.]\\s*)?(?:año|ano|year)?\\b",
+        r"\b(primer|primero|first|segundo|second|tercer|tercero|third|cuarto|fourth|quinto|fifth)\b"
+        r"\s*(?:[-º°.]\s*)?(?:año|ano|year)?\b",
         question.casefold(),
     )
     return _YEAR_WORDS.get(match.group(1)) if match else None
@@ -126,10 +126,10 @@ def section_page_blocks(parents: list[Chunk], question: str, source: str,
         1: r"primer(?:o)?", 2: r"segundo", 3: r"tercer(?:o)?",
         4: r"cuarto", 5: r"quinto",
     }
-    heading = re.compile(r"(?i)\\b" + headings[year] + r"\\s*[-–]?\\s*año\\b")
+    heading = re.compile(r"(?i)\b" + headings[year] + r"\s*[-–]?\s*año\b")
     any_heading = re.compile(
-        r"(?i)\\b(?:primer(?:o)?|segundo|tercer(?:o)?|cuarto|quinto)"
-        r"\\s*[-–]?\\s*año\\b"
+        r"(?i)\b(?:primer(?:o)?|segundo|tercer(?:o)?|cuarto|quinto)"
+        r"\s*[-–]?\s*año\b"
     )
     groups: dict[int, list[str]] = {}
     active = False
@@ -144,6 +144,6 @@ def section_page_blocks(parents: list[Chunk], question: str, source: str,
         if active:
             groups.setdefault(item.page, []).append(text)
     return [
-        Chunk(text="\\n".join(parts)[:max_chars], page=page, source=source)
+        Chunk(text="\n".join(parts)[:max_chars], page=page, source=source)
         for page, parts in sorted(groups.items()) if parts
     ]
