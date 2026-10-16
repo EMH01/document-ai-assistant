@@ -11,7 +11,7 @@ import streamlit as st
 
 from document_ai.config import Settings
 from document_ai.docling_extract import extract_document
-from document_ai.hierarchical import build_search_index, expand_with_page_neighbors
+from document_ai.hierarchical import build_search_index, expand_with_page_neighbors, page_context_blocks
 from document_ai.visual import pdf_visual_regions, describe_visuals
 from document_ai.providers import (
     LocalAnswer, LocalEmbeddings, HuggingFaceAnswer, FallbackAnswer, OpenAIAnswer, OpenAIEmbeddings,
@@ -239,7 +239,7 @@ with main:
                             st.session_state.selected_source = (file_id, chunk.page, chunk.bbox)
                             st.session_state.viewer_open = True
                             st.rerun()
-                        st.caption(chunk.text[:350])
+                        st.caption(chunk.text[:220])
 # Keep the chat composer at the bottom of the page, independently of viewer width.
 question = st.chat_input(t["ask"], disabled=not all_files)
 if question:
@@ -257,9 +257,18 @@ if question:
                 parents = {k: v for entry in selected.values() for k, v in entry["parent_map"].items()}
                 ranked_children = hybrid_rank_chunks(children, vector, question, settings.top_k)
                 original_chunks = [chunk for entry in selected.values() for chunk in entry["chunks"]]
-                ranked = expand_with_page_neighbors(
-                    ranked_children, parents, original_chunks, max_excerpts=12
+                matched = expand_with_page_neighbors(
+                    ranked_children, parents, original_chunks, max_excerpts=40
                 )
+                if matched:
+                    focused = matched[0][0]
+                    page_chunks = page_context_blocks(
+                        original_chunks, focused.source,
+                        {focused.page, focused.page + 1}
+                    )
+                    ranked = [(chunk, matched[0][1]) for chunk in page_chunks]
+                else:
+                    ranked = []
                 retrieval_finished = time.perf_counter()
                 answer = answer_from_chunks(answerer, question, ranked)
                 if isinstance(answerer, FallbackAnswer) and answerer.fell_back:
