@@ -284,7 +284,7 @@ if question:
                     answer += ("\n\n*Las referencias no verificables se han omitido.*" if st.session_state.language == "es" else "\n\n*Unverifiable references were omitted.*")
                 result = []
                 for number, (chunk, score) in enumerate(ranked, 1):
-                    file_id = next(key for key, entry in selected.items() if any(c is chunk for c in entry["chunks"]))
+                    file_id = next(key for key, entry in selected.items() if entry["name"] == chunk.source)
                     result.append((number, chunk, score, file_id))
                 st.session_state.messages.append({"role": "assistant", "content": answer, "ranked": result, "cited_numbers": cited_numbers, "timings": {"retrieval": retrieval_finished - answer_started, "generation": generation_finished - retrieval_finished, "total": generation_finished - answer_started}})
             st.rerun()
