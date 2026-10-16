@@ -57,6 +57,11 @@ def extract_document(pdf_bytes: bytes, source: str, require_docling: bool = Fals
             text = item.export_to_markdown(doc=document)
         if not text or not text.strip():
             continue
+        # Do not index Docling diagnostic messages as document evidence.
+        if "Image not available" in text or "PdfPipelineOptions(generate_picture_images=True)" in text:
+            continue
+        if text.lstrip().startswith("<!--"):
+            continue
         provenance = getattr(item, "prov", None) or []
         page = provenance[0].page_no if provenance else 1
         extracted = chunk_text(text, page=page, source=source, chunk_size=1100, overlap=120)
