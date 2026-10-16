@@ -116,7 +116,7 @@ def answer_from_chunks(answerer: AnswerProvider, question: str, ranked) -> str:
     if not ranked:
         return "No relevant document context was found."
     context = "\n\n".join(
-        f"[{i}] {chunk.citation}\n{chunk.text[:850]}"
+        f"[{i}] {chunk.citation}\n{chunk.text}"
         for i, (chunk, _) in enumerate(ranked, 1)
     )
     return answerer.answer(question, context)
