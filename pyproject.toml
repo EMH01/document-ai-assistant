@@ -28,6 +28,9 @@ open = [
   "torch>=2.3",
   "accelerate>=1.0",
 ]
+gguf = [
+  "llama-cpp-python>=0.3.0",
+]
 vision = [
   "Pillow>=10.0",
   "transformers>=4.51,<5",
