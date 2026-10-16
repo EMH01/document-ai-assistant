@@ -203,7 +203,10 @@ with main:
 # Keep the chat composer at the bottom of the page, independently of viewer width.
 question = st.chat_input(t["ask"], disabled=not all_files)
 if question:
-        st.session_state.messages.append({"role": "user", "content": question})
+    st.session_state.messages.append({"role": "user", "content": question})
+    with st.chat_message("user"):
+        st.markdown(question)
+    with st.chat_message("assistant"):
         try:
             embeddings, answerer = get_clients()
             with st.spinner(t["answer"]):
