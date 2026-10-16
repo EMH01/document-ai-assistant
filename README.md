@@ -12,10 +12,7 @@ HF_CHAT_MODEL=Qwen/Qwen3-4B-Instruct-2507
 ```
 
 On Streamlit Community Cloud, use **App settings → Secrets** to set `HF_TOKEN`
-and `AI_PROVIDER = "hf"` as secrets *and ensure AI_PROVIDER is available
-as an environment variable* (the current Settings loader reads environment
-variables). For a reliable deployment, set `AI_PROVIDER=hf` in the
-host's environment and `HF_TOKEN` in its private secrets. Never commit tokens.
+and `AI_PROVIDER = "hf"` as private secrets. Both are read directly by the Streamlit app. Never commit tokens.
 
 Inference Providers can have tiny free allowances, rate limits, or unavailable
 model/provider combinations. Confirm the chosen model actually has a live
