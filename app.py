@@ -14,7 +14,7 @@ from document_ai.docling_extract import extract_document
 from document_ai.hierarchical import build_search_index, expand_with_page_neighbors
 from document_ai.visual import pdf_visual_regions, describe_visuals
 from document_ai.providers import (
-    LocalAnswer, LocalEmbeddings, HuggingFaceAnswer, OpenAIAnswer, OpenAIEmbeddings,
+    LocalAnswer, LocalEmbeddings, HuggingFaceAnswer, FallbackAnswer, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
 )
 from document_ai.retrieval import hybrid_rank_chunks
@@ -70,7 +70,7 @@ TEXT = {
 for key, initial in {
     "files": {}, "messages": [], "upload_key": 0, "language": "es",
     "selected_source": None, "provider_id": None, "viewer_open": False,
-    "processed_cache": {},
+    "processed_cache": {}, "hf_failed": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = initial
@@ -95,10 +95,12 @@ def get_clients():
                 token = st.secrets.get("HF_TOKEN")
             except (FileNotFoundError, KeyError):
                 token = None
-        if not token:
-            raise ValueError("Configure HF_TOKEN in Streamlit secrets or your environment.")
-        return LocalEmbeddings(settings.local_embedding_model), HuggingFaceAnswer(
-            token, settings.hf_chat_model
+        local = LocalAnswer(settings.local_chat_model)
+        if not token or st.session_state.hf_failed:
+            st.session_state.hf_failed = True
+            return LocalEmbeddings(settings.local_embedding_model), local
+        return LocalEmbeddings(settings.local_embedding_model), FallbackAnswer(
+            HuggingFaceAnswer(token, settings.hf_chat_model, timeout=15), local
         )
     if provider_id == "open":
         return LocalEmbeddings(settings.local_embedding_model), LocalAnswer(settings.local_chat_model)
@@ -260,6 +262,8 @@ if question:
                 )
                 retrieval_finished = time.perf_counter()
                 answer = answer_from_chunks(answerer, question, ranked)
+                if isinstance(answerer, FallbackAnswer) and answerer.fell_back:
+                    st.session_state.hf_failed = True
                 generation_finished = time.perf_counter()
                 raw_citations = [int(n) for n in re.findall(r"\[(\d+)\]", answer)]
                 cited_numbers = {
