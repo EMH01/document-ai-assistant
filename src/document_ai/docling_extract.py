@@ -23,6 +23,7 @@ def _converter(use_ocr: bool):
     options = PdfPipelineOptions()
     options.do_ocr = use_ocr
     options.do_table_structure = True
+    # Keep CPU as the portable default for Streamlit Community Cloud.
     options.enable_remote_services = False
     return DocumentConverter(format_options={
         InputFormat.PDF: PdfFormatOption(pipeline_options=options)
