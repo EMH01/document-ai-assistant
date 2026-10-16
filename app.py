@@ -1,5 +1,6 @@
 """Streamlit document workspace: multilingual, multi-document RAG, source preview."""
 import hashlib
+import re
 import os
 import time
 
@@ -10,7 +11,7 @@ import streamlit as st
 
 from document_ai.config import Settings
 from document_ai.docling_extract import extract_document
-from document_ai.hierarchical import build_search_index, expand_ranked
+from document_ai.hierarchical import build_search_index, expand_with_page_neighbors
 from document_ai.providers import (
     LocalAnswer, LocalEmbeddings, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
@@ -191,7 +192,7 @@ with main:
                 st.caption(f"{t['search_time']}: {timings['retrieval']:.1f}s · {t['generation_time']}: {timings['generation']:.1f}s · {t['total_time']}: {timings['total']:.1f}s")
             if message["role"] == "assistant" and message.get("ranked"):
                 with st.expander(t["sources"]):
-                    for j, (chunk, score, file_id) in enumerate(message["ranked"], 1):
+                    for j, chunk, score, file_id in message["ranked"]:
                         if st.button(
                             f"[{j}] {chunk.source} · {t['pages']} {chunk.page} · {t['score']} {score:.2f}",
                             key=f"source_{idx}_{j}",
@@ -216,14 +217,23 @@ if question:
                 children = [child for entry in selected.values() for child in entry["search_chunks"]]
                 parents = {k: v for entry in selected.values() for k, v in entry["parent_map"].items()}
                 ranked_children = hybrid_rank_chunks(children, vector, question, settings.top_k)
-                ranked = expand_ranked(ranked_children, parents)
+                original_chunks = [chunk for entry in selected.values() for chunk in entry["chunks"]]
+                ranked = expand_with_page_neighbors(
+                    ranked_children, parents, original_chunks, max_excerpts=12
+                )
                 retrieval_finished = time.perf_counter()
                 answer = answer_from_chunks(answerer, question, ranked)
                 generation_finished = time.perf_counter()
+                cited_numbers = {
+                    int(n) for n in re.findall(r"\[(\d+)\]", answer)
+                    if 1 <= int(n) <= len(ranked)
+                }
                 result = []
-                for chunk, score in ranked:
+                for number, (chunk, score) in enumerate(ranked, 1):
+                    if number not in cited_numbers:
+                        continue
                     file_id = next(key for key, entry in selected.items() if any(c is chunk for c in entry["chunks"]))
-                    result.append((chunk, score, file_id))
+                    result.append((number, chunk, score, file_id))
                 st.session_state.messages.append({"role": "assistant", "content": answer, "ranked": result, "timings": {"retrieval": retrieval_finished - answer_started, "generation": generation_finished - retrieval_finished, "total": generation_finished - answer_started}})
             st.rerun()
         except Exception as exc:
