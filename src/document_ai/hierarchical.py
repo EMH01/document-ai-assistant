@@ -87,7 +87,7 @@ def page_context_blocks(parents: list[Chunk], source: str, pages: set[int],
             groups.setdefault(item.page, []).append(item.text)
     output = []
     for page in sorted(groups):
-        content = "\\n".join(groups[page])
+        content = "\n".join(groups[page])
         if content:
             output.append(Chunk(text=content[:max_chars], page=page, source=source))
     return output
