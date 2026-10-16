@@ -137,6 +137,7 @@ def section_page_blocks(parents: list[Chunk], question: str, source: str,
         if item.source != source:
             continue
         text = item.text
+        was_active = active
         if not active:
             start = heading.search(text)
             if start is None:
@@ -146,7 +147,7 @@ def section_page_blocks(parents: list[Chunk], question: str, source: str,
         # A single Docling table/text item may contain headings for two years.
         other = next(
             (m for m in any_heading.finditer(text)
-             if m.start() > 0 and not heading.fullmatch(m.group(0))),
+             if (was_active or m.start() > 0) and not heading.fullmatch(m.group(0))),
             None,
         )
         if other is not None:
