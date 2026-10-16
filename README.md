@@ -21,6 +21,24 @@ The first start downloads the selected public model weights **to the machine run
 - **PDF extraction:** PyMuPDF
 - **Image captioning:** off by default; optional in OpenAI mode only
 
+## CPU-first performance and hosting
+
+Streamlit Community Cloud does not provide a GPU assumption for this demo. The app
+uses CPU-compatible inference and Docling OCR defaults to RapidOCR's ONNX Runtime
+backend, with Spanish recognition (`iso:es`). Set `DOC_OCR_BACKEND=torch`
+to compare its alternative backend. Install the declared `[open,docling]`
+extras (the deployment `requirements.txt` does this).
+
+Processed PDFs and their embeddings are reused **within the same user's Streamlit
+session** by a content digest, even if the uploader is temporarily cleared. The
+"Clear documents" control deletes this session's processed cache. No shared
+cross-user PDF cache is used because uploads may contain private data.
+
+The first OCR run may download model assets; warm runs may be faster.
+Benchmark actual OCR and generation latency separately before considering the
+demo production-ready. The current local Transformers Qwen model always runs on
+CPU; NVIDIA hardware on a developer machine is not available on Community Cloud.
+
 ## Multi-document workspace and citation viewer
 
 The Streamlit interface accepts multiple PDF uploads in one session. You can search
