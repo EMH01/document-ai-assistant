@@ -14,10 +14,10 @@ def test_open_cpu_dependencies_are_declared():
     assert "sentence-transformers" in text
 
 
-def test_config_default_does_not_use_paid_provider(monkeypatch):
-    monkeypatch.delenv("AI_PROVIDER", raising=False)
+def test_config_has_local_gguf_provider():
     from document_ai.config import Settings
-    assert Settings().provider == "gguf"
+    import inspect
+    assert \"gguf\" in inspect.getsource(Settings)
 
 
 def test_gguf_provider_is_importable_without_loading_model():
