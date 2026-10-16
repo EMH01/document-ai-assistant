@@ -1,3 +1,33 @@
+## Hugging Face hosted answers (experimental)
+
+This opt-in mode moves **answer generation only** to Hugging Face Inference Providers.
+PDF extraction, OCR, embeddings, retrieval, and source viewer remain on the Streamlit host.
+
+Install with `python -m pip install -r requirements.txt`, then configure:
+
+```bash
+AI_PROVIDER=hf
+HF_TOKEN=your_Hugging_Face_token
+HF_CHAT_MODEL=Qwen/Qwen3-4B-Instruct-2507
+```
+
+On Streamlit Community Cloud, use **App settings → Secrets** to set `HF_TOKEN`
+and `AI_PROVIDER = "hf"` as secrets *and ensure AI_PROVIDER is available
+as an environment variable* (the current Settings loader reads environment
+variables). For a reliable deployment, set `AI_PROVIDER=hf` in the
+host's environment and `HF_TOKEN` in its private secrets. Never commit tokens.
+
+Inference Providers can have tiny free allowances, rate limits, or unavailable
+model/provider combinations. Confirm the chosen model actually has a live
+provider in your HF account before a public launch. Requests transmit only the
+retrieved document excerpts and question to the remote provider, **not the whole
+PDF**, but excerpts can still contain private data. Do not test with sensitive
+documents without understanding this processing.
+
+The app keeps original cited PDF regions clickable, and measures retrieval and
+generation time separately. The HF path is not enabled automatically and has not
+been live benchmarked.
+
 ## Experimental visual understanding (opt-in)
 
 PDF processing detects larger embedded raster figures without running a visual language
