@@ -20,13 +20,14 @@ with st.sidebar:
     use_openai = settings.provider == "openai"
     st.header("Document")
     uploaded = st.file_uploader("Upload a PDF", type=["pdf"], max_upload_size=15)
-    process = st.button("Process document", type="primary", disabled=uploaded is None)
+    st.caption("El documento se procesará automáticamente al cargarlo.")
     if st.session_state.get("chunks"):
         st.caption(f"Documento preparado · {len(st.session_state.chunks)} fragmentos consultables")
         if st.button("Clear document"):
             st.session_state.chunks = []
             st.session_state.messages = []
             st.session_state.provider_id = None
+            st.session_state.document_digest = None
             st.rerun()
 
 if "chunks" not in st.session_state:
@@ -52,7 +53,10 @@ def get_clients():
     client = OpenAI()
     return OpenAIEmbeddings(client, settings.embedding_model), OpenAIAnswer(client, settings.chat_model), client
 
-if process and uploaded is not None:
+import hashlib
+
+uploaded_digest = hashlib.sha256(uploaded.getvalue()).hexdigest() if uploaded else None
+if uploaded is not None and uploaded_digest != st.session_state.get("document_digest"):
     if uploaded.size > 15 * 1024 * 1024:
         st.error("Maximum PDF size: 15 MB.")
         st.stop()
@@ -67,6 +71,7 @@ if process and uploaded is not None:
             st.session_state.chunks = chunks
             st.session_state.messages = []
             st.session_state.provider_id = provider_id
+            st.session_state.document_digest = uploaded_digest
         st.success(f"Indexed {len(chunks)} excerpts.")
     except Exception as exc:
         st.error(f"Document processing failed: {exc}")
