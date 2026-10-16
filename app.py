@@ -15,7 +15,7 @@ from document_ai.docling_extract import extract_document
 from document_ai.hierarchical import build_search_index, expand_with_page_neighbors, page_context_blocks
 from document_ai.visual import pdf_visual_regions, describe_visuals
 from document_ai.providers import (
-    LocalAnswer, LocalEmbeddings, HuggingFaceAnswer, FallbackAnswer, OpenAIAnswer, OpenAIEmbeddings,
+    LocalAnswer, LocalEmbeddings, GGUFAnswer, HuggingFaceAnswer, FallbackAnswer, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
 )
 from document_ai.retrieval import hybrid_rank_chunks
@@ -89,6 +89,8 @@ if st.session_state.provider_id not in (None, provider_id):
 st.session_state.provider_id = provider_id
 
 def get_clients():
+    if provider_id == "gguf":
+        return LocalEmbeddings(settings.local_embedding_model), GGUFAnswer()
     if provider_id == "hf":
         token = os.getenv("HF_TOKEN")
         if not token:
@@ -106,7 +108,7 @@ def get_clients():
     if provider_id == "open":
         return LocalEmbeddings(settings.local_embedding_model), LocalAnswer(settings.local_chat_model)
     if provider_id != "openai":
-        raise ValueError("AI_PROVIDER must be open, hf or openai")
+        raise ValueError("AI_PROVIDER must be gguf, open, hf or openai")
     from openai import OpenAI
     if not os.getenv("OPENAI_API_KEY"):
         raise ValueError("OPENAI_API_KEY must be configured on the host.")
