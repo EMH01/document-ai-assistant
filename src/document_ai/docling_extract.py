@@ -1,8 +1,32 @@
 """Structure-aware PDF extraction. Optional Docling, safe PyMuPDF fallback."""
+from functools import lru_cache
 from io import BytesIO
+
+import pymupdf
 
 from .models import Chunk
 from .retrieval import chunk_text
+
+
+def needs_ocr(pdf_bytes: bytes, min_chars: int = 35) -> bool:
+    """Enable OCR only if at least one page has little selectable text."""
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf:
+        return any(len(page.get_text("text").strip()) < min_chars for page in pdf)
+
+
+@lru_cache(maxsize=2)
+def _converter(use_ocr: bool):
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    options = PdfPipelineOptions()
+    options.do_ocr = use_ocr
+    options.do_table_structure = True
+    options.enable_remote_services = False
+    return DocumentConverter(format_options={
+        InputFormat.PDF: PdfFormatOption(pipeline_options=options)
+    })
 
 
 def extract_document(pdf_bytes: bytes, source: str, require_docling: bool = False) -> list[Chunk]:
@@ -16,13 +40,7 @@ def extract_document(pdf_bytes: bytes, source: str, require_docling: bool = Fals
         from .pdf import extract_chunks
         return extract_chunks(pdf_bytes, source=source)
 
-    options = PdfPipelineOptions()
-    options.do_ocr = True
-    options.do_table_structure = True
-    options.enable_remote_services = False
-    converter = DocumentConverter(format_options={
-        InputFormat.PDF: PdfFormatOption(pipeline_options=options)
-    })
+    converter = _converter(needs_ocr(pdf_bytes))
     result = converter.convert(DocumentStream(name=source, stream=BytesIO(pdf_bytes)))
     chunks: list[Chunk] = []
     document = result.document
