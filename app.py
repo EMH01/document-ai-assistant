@@ -12,6 +12,7 @@ import streamlit as st
 from document_ai.config import Settings
 from document_ai.docling_extract import extract_document
 from document_ai.hierarchical import build_search_index, expand_with_page_neighbors
+from document_ai.visual import pdf_visual_regions, describe_visuals
 from document_ai.providers import (
     LocalAnswer, LocalEmbeddings, OpenAIAnswer, OpenAIEmbeddings,
     answer_from_chunks, index_chunks,
@@ -134,13 +135,16 @@ if uploaded is not None:
             started = time.perf_counter()
             with st.spinner(f"{t['processing']}: {name} — {t['extract']}"):
                 chunks = extract_document(raw, source=name, require_docling=True)
+                visual_regions = pdf_visual_regions(raw)
+                if os.getenv("VISUAL_CAPTIONS", "false").lower() == "true":
+                    chunks.extend(describe_visuals(raw, source=name, max_regions=2))
             after_extract = time.perf_counter()
             with st.spinner(f"{t['processing']}: {name} — {t['embed']}"):
                 search_chunks, parent_map = build_search_index(chunks)
                 index_chunks(embeddings, search_chunks)
             after_index = time.perf_counter()
             timings = {"extract": after_extract - started, "index": after_index - after_extract, "total": after_index - started}
-            prepared = {"name": name, "bytes": raw, "chunks": chunks, "search_chunks": search_chunks, "parent_map": parent_map, "timings": timings}
+            prepared = {"name": name, "bytes": raw, "chunks": chunks, "search_chunks": search_chunks, "parent_map": parent_map, "timings": timings, "visual_regions": len(visual_regions)}
             st.session_state.files[digest] = prepared
             # Private to this Streamlit session; never cache visitors' PDFs globally.
             st.session_state.processed_cache[(provider_id, digest)] = prepared
@@ -195,7 +199,7 @@ with main:
         for entry in all_files.values():
             times = entry.get("timings", {})
             duration = f" · {t['extract_time']}: {times['extract']:.1f}s · {t['index_time']}: {times['index']:.1f}s · {t['total_time']}: {times['total']:.1f}s" if times else ""
-            st.caption(f"✓ {entry['name']} · {len(entry['chunks'])} {t['fragments']}{duration}")
+            st.caption(f"✓ {entry['name']} · {len(entry['chunks'])} {t['fragments']} · Visual: {entry.get('visual_regions', 0)}{duration}")
     else:
         st.info(t["no_source"])
     for idx, message in enumerate(st.session_state.messages):
