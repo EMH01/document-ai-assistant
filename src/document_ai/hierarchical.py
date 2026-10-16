@@ -49,19 +49,45 @@ def expand_with_page_neighbors(
     parents: list[Chunk],
     max_excerpts: int = 14,
 ) -> list[tuple[Chunk, float]]:
-    """Recover nearby evidence, including a section's continuation on the next page.
+    """Return bounded, page-complete evidence rather than arbitrary OCR snippets.
 
-    This is useful when OCR extracts table rows as separate text items.
-    No LLM call is required for expansion.
+    First identify the best matching page(s). Include all items from each such
+    page in original extraction order, plus continuation pages when supported.
+    A heading alone is not enough context to answer a question about a table.
     """
     ranked = expand_ranked(ranked_children, mapping)
-    ordered = sorted(parents, key=lambda chunk: (chunk.source, chunk.page))
-    selected: dict[int, tuple[Chunk, float]] = {}
-    for parent, score in ranked:
-        selected[id(parent)] = (parent, score)
-        for neighbor in ordered:
-            if len(selected) >= max_excerpts:
-                break
-            if neighbor.source == parent.source and abs(neighbor.page - parent.page) <= 1:
-                selected.setdefault(id(neighbor), (neighbor, score * 0.85))
-    return list(selected.values())[:max_excerpts]
+    if not ranked:
+        return []
+    ordered_pages = []
+    for chunk, score in ranked:
+        key = (chunk.source, chunk.page)
+        if key not in ordered_pages:
+            ordered_pages.append(key)
+    focus_source, focus_page = ordered_pages[0]
+    # Preserve both halves of a section whose heading falls at the page bottom.
+    relevant_pages = {(focus_source, focus_page), (focus_source, focus_page + 1)}
+    # Also include different source pages if ranked and room remains.
+    result = []
+    for parent in parents:
+        if (parent.source, parent.page) in relevant_pages:
+            result.append((parent, next(
+                (score for chunk, score in ranked if chunk is parent), 0.0
+            )))
+    # Respect max_excerpts for isolated large documents, but do not arbitrarily
+    # truncate page text without marking that evidence may be incomplete.
+    return result[:max_excerpts]
+
+
+def page_context_blocks(parents: list[Chunk], source: str, pages: set[int],
+                        max_chars: int = 15000) -> list[Chunk]:
+    """Aggregate Docling item text in reading order into complete page excerpts."""
+    groups: dict[int, list[str]] = {}
+    for item in parents:
+        if item.source == source and item.page in pages:
+            groups.setdefault(item.page, []).append(item.text)
+    output = []
+    for page in sorted(groups):
+        content = "\\n".join(groups[page])
+        if content:
+            output.append(Chunk(text=content[:max_chars], page=page, source=source))
+    return output
