@@ -65,6 +65,7 @@ TEXT = {
 for key, initial in {
     "files": {}, "messages": [], "upload_key": 0, "language": "es",
     "selected_source": None, "provider_id": None, "viewer_open": False,
+    "processed_cache": {},
 }.items():
     if key not in st.session_state:
         st.session_state[key] = initial
@@ -73,6 +74,7 @@ settings = Settings()
 provider_id = settings.provider
 if st.session_state.provider_id not in (None, provider_id):
     st.session_state.files = {}
+    st.session_state.processed_cache = {}
     st.session_state.messages = []
 st.session_state.provider_id = provider_id
 
@@ -100,6 +102,7 @@ with st.sidebar:
     )
     if st.button(t["clear"], disabled=not st.session_state.files):
         st.session_state.files = {}
+        st.session_state.processed_cache = {}
         st.session_state.messages = []
         st.session_state.selected_source = None
         st.session_state.upload_key += 1
@@ -118,6 +121,10 @@ if uploaded is not None:
     for digest, (name, raw) in uploads.items():
         if digest in st.session_state.files:
             continue
+        cached = st.session_state.processed_cache.get((provider_id, digest))
+        if cached is not None:
+            st.session_state.files[digest] = {**cached, "name": name, "bytes": raw}
+            continue
         try:
             embeddings, _ = get_clients()
             started = time.perf_counter()
@@ -129,7 +136,10 @@ if uploaded is not None:
                 index_chunks(embeddings, search_chunks)
             after_index = time.perf_counter()
             timings = {"extract": after_extract - started, "index": after_index - after_extract, "total": after_index - started}
-            st.session_state.files[digest] = {"name": name, "bytes": raw, "chunks": chunks, "search_chunks": search_chunks, "parent_map": parent_map, "timings": timings}
+            prepared = {"name": name, "bytes": raw, "chunks": chunks, "search_chunks": search_chunks, "parent_map": parent_map, "timings": timings}
+            st.session_state.files[digest] = prepared
+            # Private to this Streamlit session; never cache visitors' PDFs globally.
+            st.session_state.processed_cache[(provider_id, digest)] = prepared
         except Exception as exc:
             st.error(f"{t['failed']}: {name} — {exc}")
 
