@@ -61,7 +61,7 @@ def public_answer(text: str) -> str:
 
 
 class LocalAnswer:
-    def __init__(self, model: str, max_new_tokens: int = 900):
+    def __init__(self, model: str, max_new_tokens: int = 700):
         self.model, self.max_new_tokens = model, max_new_tokens
 
     def answer(self, question: str, context: str) -> str:
@@ -116,7 +116,7 @@ def answer_from_chunks(answerer: AnswerProvider, question: str, ranked) -> str:
     if not ranked:
         return "No relevant document context was found."
     context = "\n\n".join(
-        f"[{i}] {chunk.citation}\n{chunk.text}"
+        f"[{i}] {chunk.citation}\n{chunk.text[:850]}"
         for i, (chunk, _) in enumerate(ranked, 1)
     )
     return answerer.answer(question, context)
