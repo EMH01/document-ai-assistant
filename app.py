@@ -1,6 +1,7 @@
 """Streamlit document workspace: multilingual, multi-document RAG, source preview."""
 import hashlib
 import os
+import time
 
 
 import pymupdf as fitz
@@ -33,6 +34,8 @@ TEXT = {
         "no_source": "No hay archivos procesados todavía.",
         "failed": "Error durante el procesamiento",
         "processing": "Procesando", "score": "puntuación", "total": "Archivos preparados",
+        "show_viewer": "Mostrar visor", "hide_viewer": "Ocultar visor",
+        "extract_time": "Extracción/OCR", "index_time": "Indexación", "total_time": "Tiempo total",
     },
     "en": {
         "tagline": "Ask questions about one or more PDFs and inspect the original sources.",
@@ -48,13 +51,14 @@ TEXT = {
         "missing": "Docling is not installed; OCR is unavailable.",
         "no_source": "No documents processed yet.",
         "failed": "Processing failed", "processing": "Processing", "score": "score",
-        "total": "Ready documents",
+        "total": "Ready documents", "show_viewer": "Show viewer", "hide_viewer": "Hide viewer",
+        "extract_time": "Extraction/OCR", "index_time": "Indexing", "total_time": "Total time",
     },
 }
 
 for key, initial in {
     "files": {}, "messages": [], "upload_key": 0, "language": "es",
-    "selected_source": None, "provider_id": None,
+    "selected_source": None, "provider_id": None, "viewer_open": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = initial
@@ -110,11 +114,15 @@ if uploaded is not None:
             continue
         try:
             embeddings, _ = get_clients()
+            started = time.perf_counter()
             with st.spinner(f"{t['processing']}: {name} — {t['extract']}"):
                 chunks = extract_document(raw, source=name, require_docling=True)
+            after_extract = time.perf_counter()
             with st.spinner(f"{t['processing']}: {name} — {t['embed']}"):
                 index_chunks(embeddings, chunks)
-            st.session_state.files[digest] = {"name": name, "bytes": raw, "chunks": chunks}
+            after_index = time.perf_counter()
+            timings = {"extract": after_extract - started, "index": after_index - after_extract, "total": after_index - started}
+            st.session_state.files[digest] = {"name": name, "bytes": raw, "chunks": chunks, "timings": timings}
             st.session_state.messages = []
         except Exception as exc:
             st.error(f"{t['failed']}: {name} — {exc}")
@@ -130,7 +138,15 @@ with st.sidebar:
 
 st.title("📄 Document AI Assistant")
 st.caption(t["tagline"])
-main, right = st.columns([1.25, 1], gap="large")
+viewer_label = t["hide_viewer"] if st.session_state.viewer_open else t["show_viewer"]
+if st.button(("◧ " if st.session_state.viewer_open else "▣ ") + viewer_label):
+    st.session_state.viewer_open = not st.session_state.viewer_open
+    st.rerun()
+if st.session_state.viewer_open:
+    main, right = st.columns([2.25, 1], gap="medium")
+else:
+    main = st.container()
+    right = None
 
 def draw_pdf(raw: bytes, page_number: int, bbox=None):
     with fitz.open(stream=raw, filetype="pdf") as document:
@@ -157,7 +173,9 @@ with main:
     st.subheader(t["files"])
     if all_files:
         for entry in all_files.values():
-            st.caption(f"✓ {entry['name']} · {len(entry['chunks'])} {t['fragments']}")
+            times = entry.get("timings", {})
+            duration = f" · {t['extract_time']}: {times['extract']:.1f}s · {t['index_time']}: {times['index']:.1f}s · {t['total_time']}: {times['total']:.1f}s" if times else ""
+            st.caption(f"✓ {entry['name']} · {len(entry['chunks'])} {t['fragments']}{duration}")
     else:
         st.info(t["no_source"])
     for idx, message in enumerate(st.session_state.messages):
@@ -171,9 +189,12 @@ with main:
                             key=f"source_{idx}_{j}",
                         ):
                             st.session_state.selected_source = (file_id, chunk.page, chunk.bbox)
+                            st.session_state.viewer_open = True
+                            st.rerun()
                         st.caption(chunk.text[:350])
-    question = st.chat_input(t["ask"], disabled=not all_files)
-    if question:
+# Keep the chat composer at the bottom of the page, independently of viewer width.
+question = st.chat_input(t["ask"], disabled=not all_files)
+if question:
         st.session_state.messages.append({"role": "user", "content": question})
         try:
             embeddings, answerer = get_clients()
@@ -192,29 +213,30 @@ with main:
         except Exception as exc:
             st.error(f"{t['failed']}: {exc}")
 
-with right:
-    st.subheader(t["preview"])
-    selected_source = st.session_state.selected_source
-    if selected_source and selected_source[0] in all_files:
-        file_id, page_number, bbox = selected_source
-    elif all_files:
-        file_id = next(iter(all_files))
-        page_number, bbox = 1, None
-    else:
-        file_id = None
-    if file_id:
-        entry = all_files[file_id]
-        with fitz.open(stream=entry["bytes"], filetype="pdf") as document:
-            total_pages = len(document)
-        st.caption(entry["name"])
-        page_number = st.number_input(
-            t["pages"], min_value=1, max_value=total_pages,
-            value=max(1, min(page_number, total_pages)),
-            key=f"page_{file_id}_{page_number}",
-        )
-        draw_pdf(entry["bytes"], page_number, bbox if selected_source and selected_source[0] == file_id and selected_source[1] == page_number else None)
-    else:
-        st.info(t["choose"])
-
+if right is not None:
+    with right:
+        st.subheader(t["preview"])
+        selected_source = st.session_state.selected_source
+        if selected_source and selected_source[0] in all_files:
+            file_id, page_number, bbox = selected_source
+        elif all_files:
+            file_id = next(iter(all_files))
+            page_number, bbox = 1, None
+        else:
+            file_id = None
+        if file_id:
+            entry = all_files[file_id]
+            with fitz.open(stream=entry["bytes"], filetype="pdf") as document:
+                total_pages = len(document)
+            st.caption(entry["name"])
+            page_number = st.number_input(
+                t["pages"], min_value=1, max_value=total_pages,
+                value=max(1, min(page_number, total_pages)),
+                key=f"page_{file_id}_{page_number}",
+            )
+            draw_pdf(entry["bytes"], page_number, bbox if selected_source and selected_source[0] == file_id and selected_source[1] == page_number else None)
+        else:
+            st.info(t["choose"])
+    
 st.divider()
 st.caption(t["privacy"])
