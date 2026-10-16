@@ -16,4 +16,4 @@ class Settings:
     chat_model: str = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini")
     embedding_model: str = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
     enable_image_captions: bool = os.getenv("ENABLE_IMAGE_CAPTIONS", "false").lower() == "true"
-    top_k: int = int(os.getenv("TOP_K", "5"))
+    top_k: int = int(os.getenv("TOP_K", "3"))
