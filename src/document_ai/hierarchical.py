@@ -137,12 +137,20 @@ def section_page_blocks(parents: list[Chunk], question: str, source: str,
         if item.source != source:
             continue
         text = item.text
-        if heading.search(text):
+        if not active:
+            start = heading.search(text)
+            if start is None:
+                continue
             active = True
-        elif active and any_heading.search(text):
+            text = text[start.start():]
+        # A single Docling table/text item may contain headings for two years.
+        other = any_heading.search(text, 1)
+        if other is not None:
+            text = text[:other.start()]
+            if text.strip():
+                groups.setdefault(item.page, []).append(text)
             break
-        if active:
-            groups.setdefault(item.page, []).append(text)
+        groups.setdefault(item.page, []).append(text)
     return [
         Chunk(text="\n".join(parts)[:max_chars], page=page, source=source)
         for page, parts in sorted(groups.items()) if parts
