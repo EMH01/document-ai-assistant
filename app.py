@@ -296,7 +296,11 @@ def answer_job(question, selected, embeddings, answerer, top_k):
             item.bbox for item in original_chunks
             if item.source == chunk.source and item.page == chunk.page
             and item.bbox is not None
-            and item.text in chunk.text
+            and (
+                item.text in chunk.text
+                or (len(item.text) >= 25 and item.text[:25] in chunk.text)
+                or (len(item.text) >= 25 and item.text[-25:] in chunk.text)
+            )
         ]
         highlights = list(dict.fromkeys(original_regions))[:28]
         sources.append((number, chunk, score, file_id, highlights))
