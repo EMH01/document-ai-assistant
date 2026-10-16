@@ -14,7 +14,8 @@ def test_no_visual_regions_on_text_only_page():
 
 def test_scanned_page_background_is_not_a_figure():
     import io
-    from PIL import Image
+    import pytest
+    Image = pytest.importorskip("PIL.Image")
 
     image = Image.new("RGB", (750, 1000), "white")
     stream = io.BytesIO()
