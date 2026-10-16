@@ -130,7 +130,7 @@ class GGUFAnswer:
                     "como [1] y [2]. No inventes cifras ni fuentes. /no_think"
                 )},
                 {"role": "user", "content": (
-                    f"Pregunta: {question}\\n\\nFragmentos del PDF:\\n{context}\\n"
+                    f"Pregunta: {question}\n\nFragmentos del PDF:\n{context}\n"
                     "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
                 )},
             ],
