@@ -136,10 +136,19 @@ def draw_pdf(raw: bytes, page_number: int, bbox=None):
         page_number = max(1, min(page_number, len(document)))
         page = document[page_number - 1]
         scale = min(1.4, 1100 / max(page.rect.width, 1))
+        if bbox is not None:
+            try:
+                rect = fitz.Rect(*bbox) & page.rect
+                if not rect.is_empty and rect.get_area() > 0:
+                    page.draw_rect(rect, color=(0.82, 0.55, 0.0), fill=(1.0, 0.9, 0.45), fill_opacity=0.30, width=1.5, overlay=True)
+                else:
+                    bbox = None
+            except (ValueError, TypeError):
+                bbox = None
         pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
         image_data = pix.tobytes("png")
     st.image(image_data, use_container_width=True)
-    # Deliberately do not guess highlighted coordinates: require validated provenance.
+    # Highlight only from verified document provenance, never guessed from model output.
     if bbox is None:
         st.caption(t["no_coords"])
 
@@ -202,7 +211,7 @@ with right:
             value=max(1, min(page_number, total_pages)),
             key=f"page_{file_id}_{page_number}",
         )
-        draw_pdf(entry["bytes"], page_number, bbox)
+        draw_pdf(entry["bytes"], page_number, bbox if selected_source and selected_source[0] == file_id and selected_source[1] == page_number else None)
     else:
         st.info(t["choose"])
 
