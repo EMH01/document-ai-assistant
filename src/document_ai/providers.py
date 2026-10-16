@@ -122,6 +122,27 @@ class HuggingFaceAnswer:
         return public_answer(content)
 
 
+class FallbackAnswer:
+    """Use the local model if the remote provider cannot answer.
+
+    Disable remote retries for the remainder of the session after its first
+    failure; do not treat poor grounding as a provider connectivity error.
+    """
+
+    def __init__(self, remote: AnswerProvider | None, local: AnswerProvider):
+        self.remote, self.local = remote, local
+        self.fell_back = remote is None
+
+    def answer(self, question: str, context: str) -> str:
+        if not self.fell_back and self.remote is not None:
+            try:
+                return self.remote.answer(question, context)
+            except Exception:
+                # Provider credentials, quota, network or model availability.
+                self.fell_back = True
+        return self.local.answer(question, context)
+
+
 class OpenAIAnswer:
     def __init__(self, client, model: str):
         self.client, self.model = client, model
