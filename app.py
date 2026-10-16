@@ -39,6 +39,8 @@ TEXT = {
         "show_viewer": "Mostrar visor", "hide_viewer": "Ocultar visor",
         "extract_time": "Extracción/OCR", "index_time": "Indexación", "total_time": "Tiempo total",
         "search_time": "Búsqueda", "generation_time": "Generación",
+        "candidate_sources": "Fragmentos recuperados (no necesariamente citados por la respuesta)",
+        "cited_source": "Citada", "candidate_source": "Candidata",
         "interaction_note": "Si envías una pregunta, espera su respuesta antes de añadir archivos: Streamlit puede reiniciar la ejecución activa.",
     },
     "en": {
@@ -58,6 +60,8 @@ TEXT = {
         "total": "Ready documents", "show_viewer": "Show viewer", "hide_viewer": "Hide viewer",
         "extract_time": "Extraction/OCR", "index_time": "Indexing", "total_time": "Total time",
         "search_time": "Retrieval", "generation_time": "Generation",
+        "candidate_sources": "Retrieved excerpts (not necessarily cited by the answer)",
+        "cited_source": "Cited", "candidate_source": "Candidate",
         "interaction_note": "Wait for the current answer before uploading another file: Streamlit may rerun and interrupt active generation.",
     },
 }
@@ -201,10 +205,11 @@ with main:
                 timings = message["timings"]
                 st.caption(f"{t['search_time']}: {timings['retrieval']:.1f}s · {t['generation_time']}: {timings['generation']:.1f}s · {t['total_time']}: {timings['total']:.1f}s")
             if message["role"] == "assistant" and message.get("ranked"):
-                with st.expander(t["sources"]):
+                with st.expander(t["sources"] + " · " + t["candidate_sources"]):
                     for j, chunk, score, file_id in message["ranked"]:
+                        status = t["cited_source"] if j in message.get("cited_numbers", set()) else t["candidate_source"]
                         if st.button(
-                            f"[{j}] {chunk.source} · {t['pages']} {chunk.page} · {t['score']} {score:.2f}",
+                            f"[{j}] {chunk.source} · {t['pages']} {chunk.page} · {status} · {t['score']} {score:.2f}",
                             key=f"source_{idx}_{j}",
                         ):
                             st.session_state.selected_source = (file_id, chunk.page, chunk.bbox)
@@ -240,11 +245,9 @@ if question:
                 }
                 result = []
                 for number, (chunk, score) in enumerate(ranked, 1):
-                    if number not in cited_numbers:
-                        continue
                     file_id = next(key for key, entry in selected.items() if any(c is chunk for c in entry["chunks"]))
                     result.append((number, chunk, score, file_id))
-                st.session_state.messages.append({"role": "assistant", "content": answer, "ranked": result, "timings": {"retrieval": retrieval_finished - answer_started, "generation": generation_finished - retrieval_finished, "total": generation_finished - answer_started}})
+                st.session_state.messages.append({"role": "assistant", "content": answer, "ranked": result, "cited_numbers": cited_numbers, "timings": {"retrieval": retrieval_finished - answer_started, "generation": generation_finished - retrieval_finished, "total": generation_finished - answer_started}})
             st.rerun()
         except Exception as exc:
             st.error(f"{t['failed']}: {exc}")
