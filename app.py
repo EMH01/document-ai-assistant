@@ -3,6 +3,7 @@ import hashlib
 import re
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 
 import pymupdf as fitz
@@ -70,7 +71,7 @@ TEXT = {
 for key, initial in {
     "files": {}, "messages": [], "upload_key": 0, "language": "es",
     "selected_source": None, "provider_id": None, "viewer_open": False,
-    "processed_cache": {}, "hf_failed": False,
+    "processed_cache": {}, "hf_failed": False, "pending_answer": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = initial
@@ -123,9 +124,10 @@ with st.sidebar:
     st.caption(t["interaction_note"])
     uploaded = st.file_uploader(
         t["upload"], type=["pdf"], accept_multiple_files=True,
+        disabled=st.session_state.pending_answer is not None,
         max_upload_size=15, key=f"upload_{st.session_state.upload_key}",
     )
-    if st.button(t["clear"], disabled=not st.session_state.files):
+    if st.button(t["clear"], disabled=not st.session_state.files or st.session_state.pending_answer is not None):
         st.session_state.files = {}
         st.session_state.processed_cache = {}
         st.session_state.messages = []
@@ -175,7 +177,7 @@ all_files = st.session_state.files
 names = {key: f"{value['name']} ({key[:6]})" for key, value in all_files.items()}
 with st.sidebar:
     options = ["__all__", *names]
-    scope = st.selectbox(t["scope"], options, format_func=lambda key: t["all"] if key == "__all__" else names[key])
+    scope = st.selectbox(t["scope"], options, format_func=lambda key: t["all"] if key == "__all__" else names[key], disabled=st.session_state.pending_answer is not None)
     st.caption(f"{t['total']}: {len(all_files)}")
     if all_files:
         st.caption(f"{sum(len(v['chunks']) for v in all_files.values())} {t['fragments']}")
@@ -240,56 +242,104 @@ with main:
                             st.session_state.viewer_open = True
                             st.rerun()
                         st.caption(chunk.text[:220])
-# Keep the chat composer at the bottom of the page, independently of viewer width.
-question = st.chat_input(t["ask"], disabled=not all_files)
-if question:
-    st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
-        st.markdown(question)
-    with st.chat_message("assistant"):
+# Generate on a worker thread: viewer/sidebar reruns must not interrupt the answer.
+@st.cache_resource
+def answer_executor():
+    # Serial execution limits peak CPU/RAM on a small public Streamlit host.
+    return ThreadPoolExecutor(max_workers=1)
+
+
+def answer_job(question, selected, embeddings, answerer, top_k):
+    started = time.perf_counter()
+    vector = np.asarray(embeddings.encode([question])[0])
+    children = [child for entry in selected.values() for child in entry["search_chunks"]]
+    parents = {k: v for entry in selected.values() for k, v in entry["parent_map"].items()}
+    ranked_children = hybrid_rank_chunks(children, vector, question, top_k)
+    original_chunks = [chunk for entry in selected.values() for chunk in entry["chunks"]]
+    matched = expand_with_page_neighbors(
+        ranked_children, parents, original_chunks, max_excerpts=40
+    )
+    if matched:
+        focused = matched[0][0]
+        page_chunks = page_context_blocks(
+            original_chunks, focused.source, {focused.page, focused.page + 1}
+        )
+        ranked = [(chunk, matched[0][1]) for chunk in page_chunks]
+    else:
+        ranked = []
+    retrieved = time.perf_counter()
+    answer = answer_from_chunks(answerer, question, ranked)
+    generated = time.perf_counter()
+    raw_refs = [int(n) for n in re.findall(r"\[(\d+)\]", answer)]
+    cited = {n for n in raw_refs if 1 <= n <= len(ranked)}
+    if any(n not in cited for n in raw_refs):
+        answer = re.sub(
+            r"\[(\d+)\]",
+            lambda m: m.group(0) if int(m.group(1)) in cited else "",
+            answer,
+        ).strip()
+    sources = []
+    for number, (chunk, score) in enumerate(ranked, 1):
+        file_id = next(
+            key for key, entry in selected.items() if entry["name"] == chunk.source
+        )
+        sources.append((number, chunk, score, file_id))
+    return {
+        "role": "assistant", "content": answer, "ranked": sources,
+        "cited_numbers": cited,
+        "fell_back": isinstance(answerer, FallbackAnswer) and answerer.fell_back,
+        "timings": {
+            "retrieval": retrieved - started,
+            "generation": generated - retrieved,
+            "total": generated - started,
+        },
+    }
+
+
+@st.fragment(run_every="1s")
+def pending_status():
+    pending = st.session_state.pending_answer
+    if pending is None:
+        return
+    future = pending["future"]
+    if future.done():
         try:
-            embeddings, answerer = get_clients()
-            with st.spinner(t["answer"]):
-                answer_started = time.perf_counter()
-                vector = np.asarray(embeddings.encode([question])[0])
-                selected = all_files if scope == "__all__" else {scope: all_files[scope]}
-                children = [child for entry in selected.values() for child in entry["search_chunks"]]
-                parents = {k: v for entry in selected.values() for k, v in entry["parent_map"].items()}
-                ranked_children = hybrid_rank_chunks(children, vector, question, settings.top_k)
-                original_chunks = [chunk for entry in selected.values() for chunk in entry["chunks"]]
-                matched = expand_with_page_neighbors(
-                    ranked_children, parents, original_chunks, max_excerpts=40
-                )
-                if matched:
-                    focused = matched[0][0]
-                    page_chunks = page_context_blocks(
-                        original_chunks, focused.source,
-                        {focused.page, focused.page + 1}
-                    )
-                    ranked = [(chunk, matched[0][1]) for chunk in page_chunks]
-                else:
-                    ranked = []
-                retrieval_finished = time.perf_counter()
-                answer = answer_from_chunks(answerer, question, ranked)
-                if isinstance(answerer, FallbackAnswer) and answerer.fell_back:
-                    st.session_state.hf_failed = True
-                generation_finished = time.perf_counter()
-                raw_citations = [int(n) for n in re.findall(r"\[(\d+)\]", answer)]
-                cited_numbers = {
-                    n for n in raw_citations
-                    if 1 <= int(n) <= len(ranked)
-                }
-                if any(n > len(ranked) or n < 1 for n in raw_citations):
-                    answer = re.sub(r"\[(\d+)\]", lambda match: match.group(0) if 1 <= int(match.group(1)) <= len(ranked) else "", answer).strip()
-                    answer += ("\n\n*Las referencias no verificables se han omitido.*" if st.session_state.language == "es" else "\n\n*Unverifiable references were omitted.*")
-                result = []
-                for number, (chunk, score) in enumerate(ranked, 1):
-                    file_id = next(key for key, entry in selected.items() if entry["name"] == chunk.source)
-                    result.append((number, chunk, score, file_id))
-                st.session_state.messages.append({"role": "assistant", "content": answer, "ranked": result, "cited_numbers": cited_numbers, "timings": {"retrieval": retrieval_finished - answer_started, "generation": generation_finished - retrieval_finished, "total": generation_finished - answer_started}})
-            st.rerun()
+            message = future.result()
+            if message.pop("fell_back", False):
+                st.session_state.hf_failed = True
+            st.session_state.messages.append(message)
         except Exception as exc:
-            st.error(f"{t['failed']}: {exc}")
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": "No se pudo completar la respuesta. " + str(exc),
+            })
+        finally:
+            st.session_state.pending_answer = None
+        st.rerun()
+    else:
+        with st.chat_message("assistant"):
+            st.info(t["answer"])
+
+
+pending_status()
+question = st.chat_input(
+    t["ask"],
+    disabled=not all_files or st.session_state.pending_answer is not None,
+)
+if question and st.session_state.pending_answer is None:
+    st.session_state.messages.append({"role": "user", "content": question})
+    try:
+        embeddings, answerer = get_clients()
+        selected = all_files if scope == "__all__" else {scope: all_files[scope]}
+        future = answer_executor().submit(
+            answer_job, question, selected, embeddings, answerer, settings.top_k
+        )
+        st.session_state.pending_answer = {"future": future}
+    except Exception as exc:
+        st.session_state.messages.append({
+            "role": "assistant", "content": f"{t['failed']}: {exc}"
+        })
+    st.rerun()
 
 if right is not None:
     with right:
