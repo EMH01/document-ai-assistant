@@ -27,6 +27,11 @@ open = [
   "torch>=2.3",
   "accelerate>=1.0",
 ]
+vision = [
+  "Pillow>=10.0",
+  "transformers>=4.51,<5",
+  "torch>=2.3",
+]
 dev = [
   "pytest>=8.0",
   "ruff>=0.6",
