@@ -21,6 +21,18 @@ The first start downloads the selected public model weights **to the machine run
 - **PDF extraction:** PyMuPDF
 - **Image captioning:** off by default; optional in OpenAI mode only
 
+## Structured extraction with Docling
+
+Install `pip install -e ".[open,docling,dev]"` for the recommended document pipeline.
+Docling parses PDFs with OCR and table-structure analysis and preserves page attribution
+for extracted fragments. The original PyMuPDF implementation remains available as a
+fallback when Docling is not installed. OCR is CPU-intensive and the first run may
+download model assets to the host. Do not assume CPU hosting can process large PDFs quickly.
+
+Qwen3 reasoning stays enabled; only its final answer is presented, never the `<think>` block.
+OpenAI remains configured through `AI_PROVIDER=openai` in the host environment (not a
+visitor-facing radio button). Set `OPENAI_API_KEY` securely for that mode.
+
 The open model is a small experimental baseline: citation correctness, answer quality, Spanish performance and CPU latency need empirical validation. A model being open-weight does **not** mean hosted compute is unlimited or free.
 
 ## Optional OpenAI mode
