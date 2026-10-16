@@ -36,6 +36,7 @@ TEXT = {
         "processing": "Procesando", "score": "puntuación", "total": "Archivos preparados",
         "show_viewer": "Mostrar visor", "hide_viewer": "Ocultar visor",
         "extract_time": "Extracción/OCR", "index_time": "Indexación", "total_time": "Tiempo total",
+        "search_time": "Búsqueda", "generation_time": "Generación",
     },
     "en": {
         "tagline": "Ask questions about one or more PDFs and inspect the original sources.",
@@ -53,6 +54,7 @@ TEXT = {
         "failed": "Processing failed", "processing": "Processing", "score": "score",
         "total": "Ready documents", "show_viewer": "Show viewer", "hide_viewer": "Hide viewer",
         "extract_time": "Extraction/OCR", "index_time": "Indexing", "total_time": "Total time",
+        "search_time": "Retrieval", "generation_time": "Generation",
     },
 }
 
@@ -181,6 +183,9 @@ with main:
     for idx, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+            if message.get("timings"):
+                timings = message["timings"]
+                st.caption(f"{t['search_time']}: {timings['retrieval']:.1f}s · {t['generation_time']}: {timings['generation']:.1f}s · {t['total_time']}: {timings['total']:.1f}s")
             if message["role"] == "assistant" and message.get("ranked"):
                 with st.expander(t["sources"]):
                     for j, (chunk, score, file_id) in enumerate(message["ranked"], 1):
@@ -199,16 +204,19 @@ if question:
         try:
             embeddings, answerer = get_clients()
             with st.spinner(t["answer"]):
+                answer_started = time.perf_counter()
                 vector = np.asarray(embeddings.encode([question])[0])
                 selected = all_files if scope == "__all__" else {scope: all_files[scope]}
                 chunks = [chunk for entry in selected.values() for chunk in entry["chunks"]]
                 ranked = hybrid_rank_chunks(chunks, vector, question, settings.top_k)
+                retrieval_finished = time.perf_counter()
                 answer = answer_from_chunks(answerer, question, ranked)
+                generation_finished = time.perf_counter()
                 result = []
                 for chunk, score in ranked:
                     file_id = next(key for key, entry in selected.items() if any(c is chunk for c in entry["chunks"]))
                     result.append((chunk, score, file_id))
-                st.session_state.messages.append({"role": "assistant", "content": answer, "ranked": result})
+                st.session_state.messages.append({"role": "assistant", "content": answer, "ranked": result, "timings": {"retrieval": retrieval_finished - answer_started, "generation": generation_finished - retrieval_finished, "total": generation_finished - answer_started}})
             st.rerun()
         except Exception as exc:
             st.error(f"{t['failed']}: {exc}")
