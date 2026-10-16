@@ -1,3 +1,28 @@
+## New local answer engine: GGUF (test branch)
+
+The default answer provider is now `AI_PROVIDER=gguf`: an open-weights
+`ggml-org/Qwen3-1.7B-GGUF` Q4_K_M quantized model executed with
+`llama-cpp-python`. It runs on CPU by default and keeps OCR, retrieval,
+and PDF sources in the app. It does NOT call the paid HF inference router
+or require an inference token. Its first answer downloads the public GGUF
+weights and may take longer. Subsequent answers reuse the loaded model.
+
+Install the optional local runtime (Windows Python 3.12):
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+$env:AI_PROVIDER="gguf"
+python -m streamlit run app.py
+```
+
+If the prebuilt wheel cannot be installed, follow the official
+llama-cpp-python installation guide. To run the old Transformers
+implementation for comparison, explicitly set `AI_PROVIDER=open`.
+Neither mode requires a token for inference; the first model download
+requires internet access. This GGUF implementation and hosting RAM use
+must be benchmarked before public deployment.
+
 ## Hugging Face hosted answers (experimental)
 
 This opt-in mode tries to move **answer generation only** to Hugging Face Inference Providers. If the token is absent or the remote service fails (such as HTTP 401, quota or timeout), the application automatically uses local Qwen and avoids further remote attempts for that Streamlit session. The local fallback can still be slow on CPU.
