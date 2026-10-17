@@ -3,12 +3,19 @@ import hashlib
 import re
 import os
 import time
+import sys
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 
 import pymupdf as fitz
 import numpy as np
 import streamlit as st
+
+# Resolve src-layout imports explicitly during Streamlit Cloud hot reloads.
+_SOURCE_DIR = Path(__file__).resolve().parent / "src"
+if str(_SOURCE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOURCE_DIR))
 
 from document_ai.config import Settings
 from document_ai.docling_extract import extract_document
