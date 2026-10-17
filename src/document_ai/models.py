@@ -9,6 +9,8 @@ class Chunk:
     page: int
     kind: str = "text"
     source: str = "document"
+    # PDF coordinates (points), top-left origin. None means exact highlighting unavailable.
+    bbox: tuple[float, float, float, float] | None = None
     embedding: np.ndarray | None = field(default=None, repr=False)
 
     @property

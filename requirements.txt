@@ -1,0 +1,3 @@
+# Install this project and the open-model + OCR optional dependencies.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+-e .[open,docling,gguf]
