@@ -24,7 +24,7 @@ st.set_page_config(page_title="Document AI Assistant", page_icon="📄", layout=
 
 TEXT = {
     "es": {
-        "tagline": "Pregunta sobre uno o varios PDF y consulta las fuentes originales.",
+        "tagline": "Explora documentos PDF con IA local, respuestas fundamentadas y fuentes verificables.",
         "files": "Documentos", "upload": "Añadir archivos PDF", "scope": "Consultar",
         "all": "Todos los documentos", "ready": "Listo", "pages": "página",
         "fragments": "fragmentos", "clear": "Vaciar documentos", "ask": "Pregunta sobre tus documentos",
@@ -46,7 +46,7 @@ TEXT = {
         "interaction_note": "Si envías una pregunta, espera su respuesta antes de añadir archivos: Streamlit puede reiniciar la ejecución activa.",
     },
     "en": {
-        "tagline": "Ask questions about one or more PDFs and inspect the original sources.",
+        "tagline": "Explore PDFs with local AI, grounded answers, and verifiable sources.",
         "files": "Documents", "upload": "Add PDF files", "scope": "Search in",
         "all": "All documents", "ready": "Ready", "pages": "page",
         "fragments": "excerpts", "clear": "Clear documents", "ask": "Ask about your documents",
@@ -228,7 +228,54 @@ with main:
             duration = f" · {t['extract_time']}: {times['extract']:.1f}s · {t['index_time']}: {times['index']:.1f}s · {t['total_time']}: {times['total']:.1f}s" if times else ""
             st.caption(f"✓ {entry['name']} · {len(entry['chunks'])} {t['fragments']} · Visual: {entry.get('visual_regions', 0)}{duration}")
     else:
-        st.info(t["no_source"])
+        st.markdown(
+            "### " + ("Empieza con un documento" if st.session_state.language == "es"
+                      else "Start with a document")
+        )
+        st.markdown(
+            "Sube uno o varios PDF desde el panel lateral. Cuando estén listos, "
+            "pregunta lo que quieras y abre las fuentes para verificar cada respuesta."
+            if st.session_state.language == "es" else
+            "Upload one or more PDFs using the sidebar. Once processed, ask a "
+            "question and open the sources to verify the answer."
+        )
+        a, b, c = st.columns(3)
+        with a:
+            st.markdown("**🔎 " + ("Búsqueda semántica" if st.session_state.language == "es"
+                                  else "Semantic search") + "**")
+            st.caption("Encuentra pasajes relevantes." if st.session_state.language == "es"
+                       else "Find relevant passages.")
+        with b:
+            st.markdown("**📑 " + ("PDF y OCR" if st.session_state.language == "es"
+                                  else "PDF & OCR") + "**")
+            st.caption("Texto digital y documentos escaneados."
+                       if st.session_state.language == "es"
+                       else "Digital text and scanned documents.")
+        with c:
+            st.markdown("**📍 " + ("Fuentes verificables" if st.session_state.language == "es"
+                                  else "Verifiable sources") + "**")
+            st.caption("Consulta páginas y regiones resaltadas cuando estén disponibles."
+                       if st.session_state.language == "es"
+                       else "Inspect pages and highlighted regions when available.")
+        st.info(
+            "💬 **Prueba con:** ¿Cuáles son las conclusiones principales? "
+            "· Resume las obligaciones de las partes. · ¿Qué menciona sobre los plazos?"
+            if st.session_state.language == "es" else
+            "💬 **Try asking:** What are the main conclusions? "
+            "· Summarize the parties' obligations. · What deadlines are mentioned?"
+        )
+        st.caption(
+            "IA local en el servidor · Sin clave API · El OCR y las respuestas "
+            "pueden tardar en CPU · No subas documentos confidenciales."
+            if st.session_state.language == "es" else
+            "Server-side local AI · No API key · OCR and answers may take "
+            "time on CPU · Do not upload confidential documents."
+        )
+        st.markdown(
+            "[GitHub · Código y documentación](https://github.com/EMH01/document-ai-assistant)"
+            if st.session_state.language == "es" else
+            "[GitHub · Source and documentation](https://github.com/EMH01/document-ai-assistant)"
+        )
     for idx, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
