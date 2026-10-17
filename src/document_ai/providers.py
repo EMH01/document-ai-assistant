@@ -1,5 +1,6 @@
 """Pluggable embedding and answer providers. Open weights are the default."""
 import re
+import threading
 from functools import lru_cache
 from typing import Protocol
 
@@ -92,6 +93,9 @@ class LocalAnswer:
         return public_answer(result[0]["generated_text"])
 
 
+_GGUF_LOCK = threading.Lock()
+
+
 @lru_cache(maxsize=1)
 def _gguf_model(repo_id: str, filename: str, n_ctx: int, n_gpu_layers: int):
     from huggingface_hub import hf_hub_download
@@ -121,7 +125,9 @@ class GGUFAnswer:
 
     def answer(self, question: str, context: str) -> str:
         model = _gguf_model(self.repo_id, self.filename, self.n_ctx, self.n_gpu_layers)
-        response = model.create_chat_completion(
+        # llama.cpp reuses mutable inference state: serialize access across sessions.
+        with _GGUF_LOCK:
+            response = model.create_chat_completion(
             messages=[
                 {"role": "system", "content": (
                     "Eres un asistente de análisis documental. Contesta en el idioma de "
