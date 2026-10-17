@@ -94,7 +94,7 @@ The beta accepts PDFs up to 15 MB and rejects files over 60 pages or password-pr
 
 **Privacy:** Uploaded content is processed on the application server. Do not upload confidential, medical, financial, or identifying documents to the public demo. Default GGUF generation does not send excerpts to a paid external inference provider.
 
-## Planned work
+## Possible Future Enhancements
 
 - Asynchronous document processing and per-file progress tracking.
 - Better table and scanned-PDF extraction evaluation.
@@ -102,6 +102,3 @@ The beta accepts PDFs up to 15 MB and rejects files over 60 pages or password-pr
 - More precise highlighting of OCR-derived evidence.
 - Regression tests covering varied document layouts.
 
----
-
-Part of the [EMH01 applied AI portfolio](https://github.com/EMH01).
