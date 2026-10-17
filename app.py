@@ -266,10 +266,10 @@ with main:
                        else "Inspect pages and highlighted regions when available.")
         st.info(
             "💬 **Prueba con:** ¿Cuáles son las conclusiones principales? "
-            "· Resume las obligaciones de las partes. · ¿Qué menciona sobre los plazos?"
+            "· Resume este documento. · ¿Cuáles son los puntos más importantes?"
             if st.session_state.language == "es" else
             "💬 **Try asking:** What are the main conclusions? "
-            "· Summarize the parties' obligations. · What deadlines are mentioned?"
+            "· Summarize this document. · What are the most important points?"
         )
         st.caption(
             "IA local en el servidor · Sin clave API · El OCR y las respuestas "
