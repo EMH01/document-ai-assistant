@@ -229,8 +229,15 @@ def index_chunks(embeddings: EmbeddingProvider, chunks: list[Chunk]) -> None:
 def answer_from_chunks(answerer: AnswerProvider, question: str, ranked) -> str:
     if not ranked:
         return "No relevant document context was found."
-    context = "\n\n".join(
-        f"[{i}] {chunk.citation}\n{chunk.text}"
-        for i, (chunk, _) in enumerate(ranked, 1)
-    )
-    return answerer.answer(question, context)
+    # Bound context for the 4096-token local model; preserve representation
+    # of each retrieved page rather than consuming the budget on page one.
+    local = isinstance(answerer, GGUFAnswer)
+    budget = 7200 if local else None
+    per_source = max(600, (budget // len(ranked)) - 100) if budget else None
+    excerpts = []
+    for i, (chunk, _) in enumerate(ranked, 1):
+        content = chunk.text
+        if per_source is not None and len(content) > per_source:
+            content = content[:per_source].rsplit(" ", 1)[0] + "\n[Extracto truncado]"
+        excerpts.append(f"[{i}] {chunk.citation}\n{content}")
+    return answerer.answer(question, "\n\n".join(excerpts))
