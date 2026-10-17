@@ -47,6 +47,11 @@ def extract_document(pdf_bytes: bytes, source: str, require_docling: bool = Fals
     backend = os.getenv("DOC_OCR_BACKEND", "onnxruntime").strip().lower()
     if backend not in {"onnxruntime", "torch"}:
         raise ValueError("DOC_OCR_BACKEND must be onnxruntime or torch")
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf:
+        if len(pdf) > 60:
+            raise ValueError("PDF exceeds 60 pages. Split it into smaller files for this public CPU demo.")
+        if pdf.is_encrypted:
+            raise ValueError("Password-protected PDFs are not supported.")
     converter = _converter(needs_ocr(pdf_bytes), backend)
     result = converter.convert(DocumentStream(name=source, stream=BytesIO(pdf_bytes)))
     chunks: list[Chunk] = []

@@ -1,5 +1,6 @@
 """Pluggable embedding and answer providers. Open weights are the default."""
 import re
+import threading
 from functools import lru_cache
 from typing import Protocol
 
@@ -92,6 +93,9 @@ class LocalAnswer:
         return public_answer(result[0]["generated_text"])
 
 
+_GGUF_LOCK = threading.Lock()
+
+
 @lru_cache(maxsize=1)
 def _gguf_model(repo_id: str, filename: str, n_ctx: int, n_gpu_layers: int):
     from huggingface_hub import hf_hub_download
@@ -121,24 +125,26 @@ class GGUFAnswer:
 
     def answer(self, question: str, context: str) -> str:
         model = _gguf_model(self.repo_id, self.filename, self.n_ctx, self.n_gpu_layers)
-        response = model.create_chat_completion(
-            messages=[
-                {"role": "system", "content": (
-                    "Eres un asistente de análisis documental. Contesta en el idioma de "
-                    "la pregunta usando exclusivamente los fragmentos dados. Responde "
-                    "directamente en lenguaje natural; no copies el contexto. Si falta "
-                    "información, dilo. Usa solamente identificadores de cita válidos "
-                    "como [1] y [2]. No inventes cifras ni fuentes. /no_think"
-                )},
-                {"role": "user", "content": (
-                    f"Pregunta: {question}\n\nFragmentos del PDF:\n{context}\n"
-                    "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
-                )},
-            ],
-            max_tokens=240,
-            temperature=0.7,
-            top_p=0.8,
-        )
+        # llama.cpp reuses mutable inference state: serialize access across sessions.
+        with _GGUF_LOCK:
+            response = model.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": (
+                        "Eres un asistente de análisis documental. Contesta en el idioma de "
+                        "la pregunta usando exclusivamente los fragmentos dados. Responde "
+                        "directamente en lenguaje natural; no copies el contexto. Si falta "
+                        "información, dilo. Usa solamente identificadores de cita válidos "
+                        "como [1] y [2]. No inventes cifras ni fuentes. /no_think"
+                    )},
+                    {"role": "user", "content": (
+                        f"Pregunta: {question}\n\nFragmentos del PDF:\n{context}\n"
+                        "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
+                    )},
+                ],
+                max_tokens=240,
+                temperature=0.7,
+                top_p=0.8,
+            )
         content = response["choices"][0]["message"].get("content") or ""
         return public_answer(content)
 
@@ -223,8 +229,15 @@ def index_chunks(embeddings: EmbeddingProvider, chunks: list[Chunk]) -> None:
 def answer_from_chunks(answerer: AnswerProvider, question: str, ranked) -> str:
     if not ranked:
         return "No relevant document context was found."
-    context = "\n\n".join(
-        f"[{i}] {chunk.citation}\n{chunk.text}"
-        for i, (chunk, _) in enumerate(ranked, 1)
-    )
-    return answerer.answer(question, context)
+    # Bound context for the 4096-token local model; preserve representation
+    # of each retrieved page rather than consuming the budget on page one.
+    local = isinstance(answerer, GGUFAnswer)
+    budget = 7200 if local else None
+    per_source = max(600, (budget // len(ranked)) - 100) if budget else None
+    excerpts = []
+    for i, (chunk, _) in enumerate(ranked, 1):
+        content = chunk.text
+        if per_source is not None and len(content) > per_source:
+            content = content[:per_source].rsplit(" ", 1)[0] + "\n[Extracto truncado]"
+        excerpts.append(f"[{i}] {chunk.citation}\n{content}")
+    return answerer.answer(question, "\n\n".join(excerpts))
