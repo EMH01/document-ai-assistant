@@ -9,6 +9,37 @@ from .models import Chunk
 from .retrieval import chunk_text
 
 
+def fast_digital_chunks(pdf_bytes: bytes, source: str, min_chars: int = 160):
+    """Use PyMuPDF only for clearly text-based, table-free PDFs.
+
+    Return None for scans, sparse layouts, or tables so Docling remains the
+    authoritative processor for complex documents.
+    """
+    output = []
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf:
+        for page_no, page in enumerate(pdf, 1):
+            if len(page.get_text("text").strip()) < min_chars:
+                return None
+            # Never skip layout-aware extraction on likely tabular documents.
+            try:
+                if page.find_tables().tables:
+                    return None
+            except (AttributeError, RuntimeError, ValueError):
+                return None
+            for block in page.get_text("blocks"):
+                if len(block) < 7 or block[6] != 0:
+                    continue
+                text = str(block[4]).strip()
+                if not text:
+                    continue
+                bounds = tuple(float(x) for x in block[:4])
+                for chunk in chunk_text(text, page=page_no, source=source,
+                                        chunk_size=1100, overlap=120):
+                    chunk.bbox = bounds
+                    output.append(chunk)
+    return output or None
+
+
 def needs_ocr(pdf_bytes: bytes, min_chars: int = 35) -> bool:
     """Enable OCR only if at least one page has little selectable text."""
     with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf:
@@ -52,6 +83,10 @@ def extract_document(pdf_bytes: bytes, source: str, require_docling: bool = Fals
             raise ValueError("PDF exceeds 60 pages. Split it into smaller files for this public CPU demo.")
         if pdf.is_encrypted:
             raise ValueError("Password-protected PDFs are not supported.")
+    if os.getenv("DOC_FAST_DIGITAL", "true").lower() == "true":
+        simple = fast_digital_chunks(pdf_bytes, source)
+        if simple is not None:
+            return simple
     converter = _converter(needs_ocr(pdf_bytes), backend)
     result = converter.convert(DocumentStream(name=source, stream=BytesIO(pdf_bytes)))
     chunks: list[Chunk] = []
