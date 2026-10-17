@@ -128,23 +128,23 @@ class GGUFAnswer:
         # llama.cpp reuses mutable inference state: serialize access across sessions.
         with _GGUF_LOCK:
             response = model.create_chat_completion(
-            messages=[
-                {"role": "system", "content": (
-                    "Eres un asistente de análisis documental. Contesta en el idioma de "
-                    "la pregunta usando exclusivamente los fragmentos dados. Responde "
-                    "directamente en lenguaje natural; no copies el contexto. Si falta "
-                    "información, dilo. Usa solamente identificadores de cita válidos "
-                    "como [1] y [2]. No inventes cifras ni fuentes. /no_think"
-                )},
-                {"role": "user", "content": (
-                    f"Pregunta: {question}\n\nFragmentos del PDF:\n{context}\n"
-                    "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
-                )},
-            ],
-            max_tokens=240,
-            temperature=0.7,
-            top_p=0.8,
-        )
+                messages=[
+                    {"role": "system", "content": (
+                        "Eres un asistente de análisis documental. Contesta en el idioma de "
+                        "la pregunta usando exclusivamente los fragmentos dados. Responde "
+                        "directamente en lenguaje natural; no copies el contexto. Si falta "
+                        "información, dilo. Usa solamente identificadores de cita válidos "
+                        "como [1] y [2]. No inventes cifras ni fuentes. /no_think"
+                    )},
+                    {"role": "user", "content": (
+                        f"Pregunta: {question}\n\nFragmentos del PDF:\n{context}\n"
+                        "Responde brevemente con el dato solicitado y las citas correctas. /no_think"
+                    )},
+                ],
+                max_tokens=240,
+                temperature=0.7,
+                top_p=0.8,
+            )
         content = response["choices"][0]["message"].get("content") or ""
         return public_answer(content)
 
