@@ -7,7 +7,7 @@ from document_ai.docling_extract import fast_digital_chunks
 def _pdf(text: str) -> bytes:
     pdf = pymupdf.open()
     page = pdf.new_page()
-    page.insert_text((60, 80), text, fontsize=11)
+    page.insert_textbox(pymupdf.Rect(60, 70, 540, 750), text, fontsize=11)
     data = pdf.tobytes()
     pdf.close()
     return data
