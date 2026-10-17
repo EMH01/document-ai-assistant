@@ -1,110 +1,79 @@
-<div align="center">
+# Document AI Assistant
 
-# 📄 Document AI Assistant
+A bilingual PDF question-answering application built around **retrieval-augmented generation (RAG)**, document structure extraction, and verifiable source references.
 
-### Ask your PDFs. Verify the evidence.
+**Live demo:** https://emh-document-ai-assistant.streamlit.app/  
+**Status:** public beta · CPU-first, open-weight inference
 
-**A bilingual, source-grounded document assistant powered by local open-weight AI, OCR, and semantic retrieval.**
+## Overview
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20in%20Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://emh-document-ai-assistant.streamlit.app/)
-[![Source Code](https://img.shields.io/badge/Source-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/EMH01/document-ai-assistant)
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![License](https://img.shields.io/badge/Status-Public%20Beta-64748b)
+Document AI Assistant accepts multiple digital or scanned PDFs, extracts their content, builds a semantic search index, and generates answers grounded in retrieved passages. Each answer can be checked against the original document through a page-linked PDF viewer.
 
-**[Try the live app →](https://emh-document-ai-assistant.streamlit.app/)** · **[Explore the code →](https://github.com/EMH01/document-ai-assistant)**
+The project focuses on practical document AI engineering: OCR integration, retrieval quality, source provenance, local model execution, and constrained-resource deployment.
 
-</div>
+## Implemented functionality
 
----
+- **Document ingestion:** multiple PDFs, with document-specific or cross-document search.
+- **Extraction:** Docling for document structure and tables; RapidOCR as Docling's configured OCR engine for scanned content, using ONNX Runtime.
+- **Retrieval:** multilingual sentence-transformer embeddings combined with lexical overlap scoring.
+- **Generation:** local Qwen3-1.7B Q4_K_M (GGUF) via `llama-cpp-python`, without visitor-provided API keys.
+- **Evidence inspection:** page citations, integrated PDF preview, and highlighting where extraction coordinates are available.
+- **Interface:** Streamlit UI in Spanish and English, with source navigation and timing information.
+- **Resource constraints:** PDF size/page limits, bounded inference context, and synchronized access to the shared GGUF model.
 
-## The experience
+Experimental optional modes for hosted generation and visual figure descriptions exist in the codebase but are **not part of the default public demo**.
 
-Upload one or more PDFs, ask questions in **English or Spanish**, and inspect the pages behind the answer. The application is designed around **verifiable evidence**, not just plausible responses.
-
-| Capability | What it does |
-| --- | --- |
-| **Digital & scanned PDFs** | Extracts document text with Docling and RapidOCR for pages requiring OCR. |
-| **Multi-document Q&A** | Searches across uploaded documents or within one selected PDF. |
-| **Local AI generation** | Runs a quantized **Qwen3-1.7B GGUF** model through `llama.cpp` on the host CPU. No visitor API key required. |
-| **Semantic + lexical retrieval** | Uses multilingual sentence-transformer embeddings and hybrid ranking to find supporting passages. |
-| **Inspect the evidence** | Opens cited or retrieved PDF pages in an integrated viewer, highlighting source regions when valid coordinates are available. |
-| **Bilingual interface** | Spanish / English interface and question answering. |
-
-> **Live beta:** OCR and model inference run on CPU and may take over a minute for scanned PDFs or answers, especially on a cold start. The demo is for exploration, not a high-throughput document service.
-
-## Try it
-
-1. Open **[Document AI Assistant on Streamlit](https://emh-document-ai-assistant.streamlit.app/)**.
-2. Upload a **non-sensitive PDF** using the sidebar (up to 15 MB; documents over 60 pages and encrypted PDFs are not supported in the public beta).
-3. Wait for extraction and indexing, then ask a question such as:
-   - *What are the key conclusions of this document?*
-   - *What obligations does the agreement describe?*
-   - *¿Qué se establece sobre los plazos?*
-4. Open a source to inspect the corresponding PDF page.
-
-**Privacy:** Files are processed on the app server, not solely in the browser. Do **not** upload confidential, medical, financial, or identifying documents to the public demo. Optional hosted-provider modes are separate from the default local generation.
-
-## How it works
+## Architecture
 
 ```text
 PDF upload
-   │
-   ├── PyMuPDF inspection + Docling structure extraction
-   │                             └── RapidOCR (for scanned pages)
-   ▼
-Page-aware excerpts + available bounding boxes
-   ▼
-Multilingual Sentence Transformers embeddings
-   ▼
-Hybrid semantic / lexical search
-   ▼
+  ├─ PyMuPDF: page inspection
+  └─ Docling: structure and table extraction
+       └─ RapidOCR / ONNX Runtime (when OCR is required)
+            ↓
+Page-aware passages and available bounding boxes
+            ↓
+Sentence Transformers: multilingual embeddings
+            ↓
+Hybrid semantic + lexical retrieval
+            ↓
 Page / section context assembly
-   ▼
-Qwen3-1.7B (GGUF · llama.cpp · CPU)
-   ▼
-Natural-language answer + source links + PDF viewer
+            ↓
+Qwen3-1.7B GGUF via llama.cpp (CPU)
+            ↓
+Answer with source references + PDF viewer
 ```
 
-### Design decisions
+### Extraction and OCR
 
-- **Explainable answers:** retrieval preserves source/page metadata; PDF highlights appear only when coordinates can be verified.
-- **Open by default:** local quantized generation rather than requiring a paid inference API.
-- **Practical CPU deployment:** ONNX Runtime OCR and bounded context for a limited-memory host.
-- **Honest degradation:** scanned text, complex tables, model output, and OCR coordinates can be imperfect; answers should be checked against the original page.
-- **Document safety limits:** this public beta rejects encrypted documents and PDFs over 60 pages to avoid unbounded work. Concurrent GGUF inference is serialized.
+Docling orchestrates the document-conversion pipeline. **RapidOCR is its selected OCR backend**, not a separate replacement for Docling. It is enabled when the PDF contains pages with insufficient selectable text. Docling also processes document structure and tables.
+
+The application retains page identifiers and bounding boxes where supplied by the extraction pipeline. Coordinates can be missing or imprecise on some scans, so highlighting is only displayed when a source location is available.
+
+### Retrieval and generation
+
+Compact search passages are indexed with `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`. Retrieved evidence is expanded to nearby page or section context before being sent to the local language model.
+
+The default answer model is `ggml-org/Qwen3-1.7B-GGUF` (`Q4_K_M`) through llama.cpp. A bounded context reduces the risk of exceeding the model window, but long sections may still lose detail. The system presents candidate or cited source pages so users can inspect the underlying evidence.
 
 ## Run locally
 
-Python **3.11+** is required. The GGUF model and embedding weights are downloaded on first use; sufficient RAM and an internet connection for the initial download are needed.
+Requires Python 3.11+ and sufficient RAM for OCR, embeddings, and GGUF inference.
 
 ```bash
 git clone https://github.com/EMH01/document-ai-assistant.git
 cd document-ai-assistant
 python -m venv .venv
-# Activate your virtual environment.
+# Activate .venv (PowerShell: .venv\Scripts\Activate.ps1)
 python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-On Windows PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`. On macOS/Linux, use `source .venv/bin/activate`.
+The initial run downloads public model weights. `requirements.txt` includes a CPU wheel index for llama.cpp; installation requirements can vary across operating systems and Python versions.
 
-The requirements file includes the CPU wheel index for `llama-cpp-python`. Platform-specific builds may require additional compilation tools.
+Copy `.env.example` to `.env` to customize configuration. The default `AI_PROVIDER=gguf` uses local inference. `DOC_OCR_BACKEND=onnxruntime` selects the OCR runtime. Experimental provider and vision settings are optional.
 
-### Configuration
-
-Copy `.env.example` to `.env` and modify settings as needed. By default:
-
-| Setting | Default / role |
-| --- | --- |
-| `AI_PROVIDER` | `gguf` — local generation |
-| `LOCAL_EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` |
-| `DOC_OCR_BACKEND` | `onnxruntime` |
-| `VISUAL_CAPTIONS` | `false` — experimental visual descriptions disabled |
-| `TOP_K` | `3` (unless overridden) |
-
-Alternative provider modes (`hf`, `open`, and `openai`) exist for experimentation, but the public deployment uses the local GGUF path. Optional remote providers can require credentials and may transmit excerpts outside the host.
-
-## Quality checks
+## Tests
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -113,21 +82,26 @@ python -m ruff check .
 python -m compileall -q app.py src tests
 ```
 
-Tests cover source rendering, retrieval, academic-section continuity, provider behavior, OCR selection, and basic deployment checks. Passing unit tests does not guarantee that every PDF layout will be parsed perfectly.
+Unit tests exercise retrieval, source metadata, OCR selection, academic-section boundaries, model-provider interfaces, and context limits. Real-document tests remain important because extraction quality depends on layout and scan quality.
 
-## Current limitations & roadmap
+## Public demo and limitations
 
-- **Latency:** CPU-based OCR and LLM generation are slower than GPU-hosted alternatives.
-- **Concurrency:** generation is serialized for model safety; queues may form under simultaneous use.
-- **Complex PDFs:** tables, unusual layouts, and OCR artifacts can affect exact counts and source highlights.
-- **Planned improvements:** background upload queue, better per-document status, stronger table-structure evaluation, performance benchmarks, and improved scanned-PDF highlights.
+**Demo:** https://emh-document-ai-assistant.streamlit.app/
+
+The application runs on Streamlit Community Cloud with free-tier CPU resources. Scanned-document processing and generation can take a minute or more, especially on cold starts. Inference is serialized to protect shared model state, so simultaneous visitors may wait.
+
+The beta accepts PDFs up to 15 MB and rejects files over 60 pages or password-protected documents. Complex tables, OCR artifacts, long document sections, and missing bounding boxes can affect answer quality or evidence highlighting.
+
+**Privacy:** Uploaded content is processed on the application server. Do not upload confidential, medical, financial, or identifying documents to the public demo. Default GGUF generation does not send excerpts to a paid external inference provider.
+
+## Planned work
+
+- Asynchronous document processing and per-file progress tracking.
+- Better table and scanned-PDF extraction evaluation.
+- Latency and memory benchmarks for constrained deployment.
+- More precise highlighting of OCR-derived evidence.
+- Regression tests covering varied document layouts.
 
 ---
 
-<div align="center">
-
-**Built as an applied AI engineering portfolio project.**
-
-[Launch live demo](https://emh-document-ai-assistant.streamlit.app/) · [GitHub profile](https://github.com/EMH01)
-
-</div>
+Part of the [EMH01 applied AI portfolio](https://github.com/EMH01).
